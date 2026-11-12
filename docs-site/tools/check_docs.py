@@ -40,6 +40,8 @@ def keys_for(section):
         keys |= set(SPEC["device"])
     if spec.get("__type__") == "config_player":
         keys |= set(SPEC["config_player_common"])
+    if spec.get("__parent__"):
+        keys |= {k for k in SPEC[spec["__parent__"]] if not k.startswith("__")}
     if section == "ball_devices":
         for sub in BALL_DEVICE_SUBSPECS:
             keys |= {k for k in SPEC[sub] if k != "class"}

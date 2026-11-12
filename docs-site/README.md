@@ -53,7 +53,9 @@ Done:
   timed switches, pulse/hold settings, max_hold_duration, switch-to-coil wiring); flippers-and-autofire (verified:
   hardware rules per flipper type, autofire, kickback relight, missing hold power error); modes (verified: four
   mode files read from the page, game/non-game modes, restart_on_next_ball, mode-scoped event_player, two startup
-  errors).
+  errors); events (verified: handler delays, event_player forms, event args via value/type, conditions on event
+  args and current_player, .N priority order; "More examples": drop target bank, counter hit/complete, timer
+  tick/complete, device-state condition, built-in flipper_cancel).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -76,12 +78,19 @@ Findings from running MPF (already reflected in the pages):
   `verify/test_guides.py::test_timeout_real_spacing` is an expected failure until fixed.
 - `flippers: power_setting_name` scales `mpf: default_pulse_ms` (10 ms), not the coil's `default_pulse_ms`, unless
   `main_coil_overwrite: pulse_ms` is set.
+- Conditions are only checked when first evaluated: `{true}` (lower case) boots fine and stops MPF at the first
+  matching event. A `current_player` condition outside a game is false, not an error.
+- A condition reads device state from before the event is handled: `s_ramp_active{device.counters.x.value==2}` is
+  true on the third hit. Use `logicblock_<name>_hit{count==2}` instead.
+- `events_when_complete` / `events_when_hit` replace the default `logicblock_<name>_complete` / `_hit` events.
+- `mpfconfig.yaml` defines `combo_switches: both_flippers` (tags `left_flipper` + `right_flipper` -> `flipper_cancel`)
+  and `timed_switches: flipper_cradle`; user entries with those names are merged into them.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: events and conditions, shots and scoring, shows, debugging and validation errors.
+1. Task guides: shots and scoring, shows, debugging and validation errors.
 2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.
 3. Later: mpf-gmc and mpf-monitor.

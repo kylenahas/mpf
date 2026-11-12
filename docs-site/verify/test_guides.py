@@ -6,6 +6,7 @@ the test cannot drift apart: the config is read from the page itself.
 Run from the repository root:
   venv/Scripts/python -I -m unittest discover -s docs-site/verify -v
 """
+import io
 import json
 import re
 import shutil
@@ -452,6 +453,211 @@ class TestModeErrors(unittest.TestCase):
                               "#config_version=6\nmode:\n  start_events: start_hurry_up\n  stop_on_ball_end: false\n"})
         with self.assertRaisesRegex(Exception, "All game modes need to stop at ball end"):
             self.boot(path)
+
+
+EVENTS_PAGE = "build/events.md"
+
+
+class TestEvents(GuideMachine):
+    """build/events.md: the complete config (base mode from `mpf init`)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config(EVENTS_PAGE))
+
+    def test_page_walkthrough(self):
+        order = []
+        self.machine.events.add_handler("target_first", lambda **kwargs: order.append("first"))
+        self.machine.events.add_handler("target_second", lambda **kwargs: order.append("second"))
+        for event in ("target_hit", "big_award", "lane_done", "second_ball_started", "ball_report"):
+            self.mock_event(event)
+        self.advance_time_and_run(1)
+        # 1. attract: priority order, condition on current_player is false
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("target_hit")
+        self.assertEqual(["first", "second"], order)
+        self.assertEventNotCalled("big_award")
+        # 2. ball 1
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.assertEventCalledWith("ball_report", which=1, priority=0)
+        self.assertEventNotCalled("second_ball_started")
+        # 3. target on ball 1
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(.1)
+        self.assertEventNotCalled("big_award")
+        # 4. delayed post
+        self.hit_and_release_switch("s_lane")
+        self.advance_time_and_run(1.5)
+        self.assertEventNotCalled("lane_done")
+        self.advance_time_and_run(1)
+        self.assertEventCalled("lane_done")
+        # 5. ball 2
+        self.advance_time_and_run(10)  # ball reaches the playfield (eject timeout) so the drain ends the ball
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEventCalled("second_ball_started")
+        self.assertEventCalledWith("ball_report", which=2, priority=0)
+        # 6. big_award on ball 2, knocker 500 ms later
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("big_award")
+        self.assertEqual("disabled", self.machine.coils["c_knocker"].hw_driver.state)
+        self.advance_time_and_run(.5)
+        self.assertTrue(self.machine.coils["c_knocker"].hw_driver.state.startswith("pulsed_"))
+
+
+def merge_config(text, additions):
+    """Merge a YAML snippet into a whole config: lists are extended, named entries added or replaced."""
+    config = json.loads(json.dumps(YamlInterface.process(text)))
+    for section, value in json.loads(json.dumps(YamlInterface.process(additions))).items():
+        if isinstance(value, list):
+            config.setdefault(section, []).extend(value)
+        elif isinstance(value, dict):
+            config.setdefault(section, {}).update(value)
+        else:
+            config[section] = value
+    stream = io.StringIO()
+    stream.write("#config_version=6\n")
+    YAML(typ="safe", pure=True).dump(config, stream)
+    return stream.getvalue()
+
+
+def examples_machine(additions_extra=""):
+    additions = [b for b in yaml_blocks(EVENTS_PAGE) if b.startswith("# Added to config/config.yaml")][0]
+    files = {k: v for k, v in page_files(EVENTS_PAGE).items() if k.startswith("modes/")}
+    return make_machine(merge_config(merge_config(full_config(EVENTS_PAGE), additions), additions_extra or "{}"),
+                        files=files)
+
+
+class TestEventExamples(GuideMachine):
+    """build/events.md "More examples": additions block and the examples mode, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = examples_machine()
+
+    def test_examples(self):
+        for event in ("lower_bank_complete", "one_more_ramp", "ramp_jackpot_lit", "logicblock_ramp_counter_complete",
+                      "hurry_up_halfway", "hurry_up_missed", "hurry_up_collected", "show_status"):
+            self.mock_event(event)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(2)
+        self.assertModeRunning("examples")
+        # drop target bank
+        self.hit_switch_and_run("s_drop1", .6)
+        self.hit_switch_and_run("s_drop2", .6)
+        self.assertEventNotCalled("lower_bank_complete")
+        self.hit_switch_and_run("s_drop3", .6)
+        self.assertEventCalled("lower_bank_complete")
+        # counter: hit event with count, events_when_complete replaces the default
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventNotCalled("one_more_ramp")
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("one_more_ramp")
+        self.assertEventNotCalled("ramp_jackpot_lit")
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("ramp_jackpot_lit")
+        self.assertEventNotCalled("logicblock_ramp_counter_complete")
+        # the 3rd ramp started the timer but did not collect (condition sees state before the event)
+        self.assertTrue(self.machine.timers["hurry_up_timer"].running)
+        self.assertEventNotCalled("hurry_up_collected")
+        self.advance_time_and_run(4.5)
+        self.assertEventNotCalled("hurry_up_halfway")
+        self.advance_time_and_run(1)
+        self.assertEventCalled("hurry_up_halfway")
+        self.advance_time_and_run(5)
+        self.assertEventCalled("hurry_up_missed")
+        # a ramp after the timer ended does not collect
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventNotCalled("hurry_up_collected")
+        # both flipper buttons -> built-in flipper_cancel
+        self.hit_switch_and_run("s_left_flipper", .1)
+        self.hit_switch_and_run("s_right_flipper", .1)
+        self.assertEventCalled("show_status")
+
+    def test_collect_while_running(self):
+        self.mock_event("hurry_up_collected")
+        self.mock_event("hurry_up_missed")
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(2)
+        for _ in range(3):
+            self.hit_and_release_switch("s_ramp")
+            self.advance_time_and_run(.1)
+        self.advance_time_and_run(3)
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("hurry_up_collected")
+        self.assertFalse(self.machine.timers["hurry_up_timer"].running)
+        self.advance_time_and_run(10)
+        self.assertEventNotCalled("hurry_up_missed")
+
+class TestCounterValueConditionLags(GuideMachine):
+    """build/events.md warning: an event_player line `s_ramp_active{device.counters.ramp_counter.value==2}` in the
+    examples mode is true on the third hit, because the counter has not counted that hit yet."""
+
+    @classmethod
+    def setUpClass(cls):
+        mode_file = "modes/examples/config/examples.yaml"
+        lagging = page_files(EVENTS_PAGE)[mode_file].replace(
+            "event_player:\n", "event_player:\n  s_ramp_active{device.counters.ramp_counter.value==2}: lagging\n")
+        additions = [b for b in yaml_blocks(EVENTS_PAGE) if b.startswith("# Added to config/config.yaml")][0]
+        cls.machine_dir = make_machine(merge_config(full_config(EVENTS_PAGE), additions), files={mode_file: lagging})
+
+    def test_lags_one_hit(self):
+        self.mock_event("lagging")
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(2)
+        for _ in (1, 2):
+            self.hit_and_release_switch("s_ramp")
+            self.advance_time_and_run(.1)
+            self.assertEventNotCalled("lagging")
+        self.hit_and_release_switch("s_ramp")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("lagging")
+
+
+class TestOwnBothFlippersCombo(GuideMachine):
+    """build/events.md warning: a combo switch named both_flippers is merged into MPF's built-in one."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = examples_machine(
+            "combo_switches:\n  both_flippers:\n    switches_1: s_left_flipper\n    switches_2: s_right_flipper\n")
+
+    def test_merged(self):
+        self.mock_event("both_flippers_both")
+        self.mock_event("flipper_cancel")
+        self.advance_time_and_run(1)
+        self.hit_switch_and_run("s_left_flipper", .1)
+        self.hit_switch_and_run("s_right_flipper", .1)
+        self.assertEqual("both", self.machine.combo_switches["both_flippers"].state)
+        self.assertEventCalled("flipper_cancel")
+        self.assertEventNotCalled("both_flippers_both")
+
+
+class TestEventLowercaseTrue(GuideMachine):
+    """build/events.md: lower-case true boots, then fails when the condition is first evaluated."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config(EVENTS_PAGE).replace("{ball==2}", "{true}"))
+
+    def test_error_at_first_evaluation(self):
+        self.advance_time_and_run(1)
+        self.assertModeRunning("attract")
+        with self.assertRaisesRegex(Exception, "Placeholder use Python syntax"):
+            self.start_game()
+            self.advance_time_and_run(1)
 
 
 if __name__ == "__main__":
