@@ -48,7 +48,8 @@ Done:
   `mpf game -X` and in `MpfGameTestCase`), config-files.
 - Build: fast-hardware (from test configs; not run on hardware); ball-devices (verified: trough, three plunger
   styles, saucer, playfield switches, ball search); switches-and-coils (verified: NC, ignore window, switch events,
-  timed switches, pulse/hold settings, max_hold_duration, switch-to-coil wiring).
+  timed switches, pulse/hold settings, max_hold_duration, switch-to-coil wiring); flippers-and-autofire (verified:
+  hardware rules per flipper type, autofire, kickback relight, missing hold power error).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -66,12 +67,17 @@ Findings from running MPF (already reflected in the pages):
 - `switch_player:` can press switches on a schedule; useful with no keyboard/monitor.
 - Switch `<name>_active` and `sw_<tag>` events are only posted when something handles them (or `debug: true`).
 - A coil cannot be enabled without `default_hold_power`, `max_hold_power` or `allow_enable`.
+- MPF bug: `autofire_coils` `timeout_watch_time` is divided by 1000 twice (`autofire.py` `_initialize` and `_hit`),
+  so the stuck-pop-bumper timeout never trips at real hit spacing. Documented with a warn callout;
+  `verify/test_guides.py::test_timeout_real_spacing` is an expected failure until fixed.
+- `flippers: power_setting_name` scales `mpf: default_pulse_ms` (10 ms), not the coil's `default_pulse_ms`, unless
+  `main_coil_overwrite: pulse_ms` is set.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: flippers and autofire, modes and built-in modes,
+1. Task guides: modes and built-in modes,
    events and conditions, shots and scoring, shows, debugging and validation errors.
 2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.

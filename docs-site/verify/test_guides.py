@@ -253,5 +253,86 @@ class TestSwitchesAndCoils(GuideMachine):
         self.assertEventCalled("magnet_off")
 
 
+class TestFlippersAndAutofire(GuideMachine):
+    """build/flippers-and-autofire.md: the complete config at the end of the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config("build/flippers-and-autofire.md"))
+
+    def rules(self):
+        switches = {s.hw_switch: n for n, s in self.machine.switches.items()}
+        coils = {c.hw_driver: n for n, c in self.machine.coils.items()}
+        return {(switches[s], coils[d]): r for (s, d), r in self.machine.default_platform.rules.items()}
+
+    def test_page_walkthrough(self):
+        self.advance_time_and_run(1)
+        # 1. no rules in attract
+        self.assertEqual({}, self.rules())
+        # 2. rules written at ball start
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.assertEqual({
+            ("s_left_flipper", "c_left_flipper"): "pulse_on_hit_and_enable_and_release",
+            ("s_right_flipper", "c_right_flipper_hold"): "pulse_on_hit_and_enable_and_release",
+            ("s_right_flipper", "c_right_flipper_main"): "pulse_on_hit_and_release_and_disable",
+            ("s_right_flipper_eos", "c_right_flipper_main"): "pulse_on_hit_and_release_and_disable",
+            ("s_left_sling", "c_left_sling"): "pulse_on_hit",
+            ("s_pop", "c_pop"): "pulse_on_hit",
+            ("s_left_outlane", "c_kickback"): "pulse_on_hit",
+        }, self.rules())
+        # 3. kickback fires once, disables itself, comes back on light_kickback
+        self.mock_event("kickback_left_kickback_fired")
+        self.hit_and_release_switch("s_left_outlane")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("kickback_left_kickback_fired")
+        self.assertNotIn(("s_left_outlane", "c_kickback"), self.rules())
+        self.post_event("light_kickback")
+        self.advance_time_and_run(.1)
+        self.assertIn(("s_left_outlane", "c_kickback"), self.rules())
+
+    def test_timeout_same_instant(self):
+        """Hits at one instant do trip the timeout (what MPF's own test checks)."""
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        for _ in range(10):
+            self.hit_and_release_switch("s_pop")
+            self.machine_run()
+        self.assertNotIn(("s_pop", "c_pop"), self.rules())
+        self.advance_time_and_run(2.1)
+        self.assertIn(("s_pop", "c_pop"), self.rules())
+
+    @unittest.expectedFailure
+    def test_timeout_real_spacing(self):
+        """The warning on the page: 10 hits 50 ms apart (inside timeout_watch_time: 1s) should disable the pop bumper.
+
+        Fails on MPF 0.82.0.dev0 (timeout_watch_time is divided by 1000 twice). If this starts passing, MPF was fixed:
+        remove the expectedFailure and the warning on the page.
+        """
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        for _ in range(10):
+            self.hit_and_release_switch("s_pop")
+            self.advance_time_and_run(.05)
+        self.assertNotIn(("s_pop", "c_pop"), self.rules())
+
+
+class TestSingleWoundFlipperWithoutHoldPower(GuideMachine):
+    """build/flippers-and-autofire.md: a single-wound flipper coil with no hold power stops at ball start."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config("build/flippers-and-autofire.md"),
+                                       "coils:\n  c_left_flipper:\n    number:\n    default_pulse_ms: 30\n")
+
+    def test_error(self):
+        self.advance_time_and_run(1)
+        with self.assertRaisesRegex(Exception, "hold_power 0.0"):
+            self.start_game()
+            self.advance_time_and_run(1)
+
+
 if __name__ == "__main__":
     unittest.main()
