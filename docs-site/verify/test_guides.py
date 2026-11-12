@@ -28,18 +28,33 @@ def yaml_blocks(page):
 
 
 def full_config(page):
-    """The last block on the page that is a whole config file (starts with #config_version)."""
+    """The block labelled `config/config.yaml` on the page, else the last block that is a whole config file."""
+    labelled = page_files(page).get("config/config.yaml")
+    if labelled:
+        return labelled
     return [b for b in yaml_blocks(page) if b.startswith("#config_version")][-1]
 
 
-def make_machine(text, replace_devices=None):
+FILE_BLOCK = re.compile(r"^`((?:modes|config)/[\w/.-]+\.yaml)`:[ \t]*\n\s*\n```yaml\s*\n(.*?)^```", re.M | re.S)
+
+
+def page_files(page):
+    """Blocks labelled by a line holding only their file path, e.g. `modes/base/config/base.yaml`: then the block."""
+    return dict(FILE_BLOCK.findall((CONTENT / page).read_text(encoding="utf-8")))
+
+
+def make_machine(text, replace_devices=None, files=None):
     """`mpf init` a temp folder and write `text` as config/config.yaml.
 
     replace_devices: a YAML snippet like `ball_devices: {bd_plunger: {...}}`; each device in it replaces the device of the
     same name in the config (used for the variants shown on a page).
+    files: {relative path: text} written after `mpf init`, e.g. mode configs from page_files().
     """
     path = tempfile.mkdtemp(prefix="mpf_docs_")
     InitCommand(["init"], path)
+    for rel, body in (files or {}).items():
+        Path(path, rel).parent.mkdir(parents=True, exist_ok=True)
+        Path(path, rel).write_text(body, encoding="utf-8")
     if replace_devices:
         config = json.loads(json.dumps(YamlInterface.process(text)))
         for section, devices in YamlInterface.process(replace_devices).items():
@@ -332,6 +347,111 @@ class TestSingleWoundFlipperWithoutHoldPower(GuideMachine):
         with self.assertRaisesRegex(Exception, "hold_power 0.0"):
             self.start_game()
             self.advance_time_and_run(1)
+
+
+MODES_PAGE = "build/modes.md"
+
+
+def modes_machine(extra=None):
+    files = {k: v for k, v in page_files(MODES_PAGE).items() if k.startswith("modes/")}
+    files.update(extra or {})
+    return make_machine(full_config(MODES_PAGE), files=files)
+
+
+class TestModes(GuideMachine):
+    """build/modes.md: machine config plus the four mode files, all read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = modes_machine()
+
+    def running(self):
+        return {m.name: m.priority for m in self.machine.mode_controller.active_modes}
+
+    def test_page_walkthrough(self):
+        self.assertEqual(4, len([k for k in page_files(MODES_PAGE) if k.startswith("modes/")]))
+        self.mock_event("skillshot_made")
+        self.mock_event("skillshot_lit")
+        self.advance_time_and_run(1)
+        self.assertEqual({"attract": 10}, self.running())
+        # game mode outside a game is ignored
+        self.post_event("start_hurry_up")
+        self.advance_time_and_run(.1)
+        self.assertEqual({"attract": 10}, self.running())
+        # non-game mode runs in attract
+        self.post_event("start_lamp_test")
+        self.advance_time_and_run(.1)
+        self.assertEqual({"attract": 10, "lamp_test": 100}, self.running())
+        self.post_event("stop_lamp_test")
+        self.advance_time_and_run(.1)
+        # skill shot's event_player does not exist outside the mode
+        self.hit_and_release_switch("s_upper_lane")
+        self.advance_time_and_run(.1)
+        self.assertEventNotCalled("skillshot_made")
+        # ball 1
+        self.start_game()
+        self.advance_time_and_run(2)
+        self.assertEqual({"game": 20, "base": 100, "skillshot": 200}, self.running())
+        self.assertEventCalled("skillshot_lit")
+        self.hit_and_release_switch("s_upper_lane")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("skillshot_made", times=1)
+        self.assertEqual({"game": 20, "base": 100}, self.running())
+        self.hit_and_release_switch("s_upper_lane")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("skillshot_made", times=1)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(.1)
+        self.assertEqual({"game": 20, "base": 100, "hurry_up": 300}, self.running())
+        # ball 2: hurry_up restarted
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual({"game": 20, "base": 100, "skillshot": 200, "hurry_up": 300}, self.running())
+        self.hit_and_release_switch("s_left_sling")
+        self.advance_time_and_run(.1)
+        self.assertNotIn("skillshot", self.running())
+        self.post_event("hurry_up_collected")
+        self.advance_time_and_run(.1)
+        self.assertEqual({"game": 20, "base": 100}, self.running())
+        # ball 3: collected hurry_up does not come back
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(3)
+        self.assertEqual({"game": 20, "base": 100, "skillshot": 200}, self.running())
+
+
+class TestModeErrors(unittest.TestCase):
+    """build/modes.md: the two startup errors quoted on the page."""
+
+    def boot(self, machine_dir):
+        class Boot(GuideMachine):
+            def runTest(self):
+                pass
+        Boot.machine_dir = machine_dir
+        test = Boot("runTest")
+        try:
+            test.setUp()
+        finally:
+            try:
+                test.tearDown()
+            except Exception:  # noqa: BLE001  (machine may not have started)
+                pass
+            shutil.rmtree(machine_dir, ignore_errors=True)
+
+    def test_missing_mode_folder(self):
+        path = modes_machine()
+        cfg = Path(path, "config", "config.yaml")
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace("  - lamp_test\n", "  - lamp_test\n  - bonus_round\n"),
+                       encoding="utf-8")
+        with self.assertRaisesRegex(Exception, "No config found for mode 'bonus_round'"):
+            self.boot(path)
+
+    def test_game_mode_must_stop_on_ball_end(self):
+        path = modes_machine({"modes/hurry_up/config/hurry_up.yaml":
+                              "#config_version=6\nmode:\n  start_events: start_hurry_up\n  stop_on_ball_end: false\n"})
+        with self.assertRaisesRegex(Exception, "All game modes need to stop at ball end"):
+            self.boot(path)
 
 
 if __name__ == "__main__":

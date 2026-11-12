@@ -39,7 +39,9 @@ Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matte
   with `unverified:` front matter or a `warn` callout.
 - `check_docs.py` must pass.
 - A page with `verified:` front matter has a test class in `verify/test_guides.py` that reads its config from the
-  page. Change the page, rerun the tests.
+  page. Change the page, rerun the tests. For multi-file machines, put a line holding only the file path
+  (`` `modes/base/config/base.yaml`: ``) before each block; `page_files()` picks those up, and a block labelled
+  `config/config.yaml` is the machine config.
 
 ## Status (2026-11-12)
 
@@ -49,7 +51,9 @@ Done:
 - Build: fast-hardware (from test configs; not run on hardware); ball-devices (verified: trough, three plunger
   styles, saucer, playfield switches, ball search); switches-and-coils (verified: NC, ignore window, switch events,
   timed switches, pulse/hold settings, max_hold_duration, switch-to-coil wiring); flippers-and-autofire (verified:
-  hardware rules per flipper type, autofire, kickback relight, missing hold power error).
+  hardware rules per flipper type, autofire, kickback relight, missing hold power error); modes (verified: four
+  mode files read from the page, game/non-game modes, restart_on_next_ball, mode-scoped event_player, two startup
+  errors).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -77,8 +81,7 @@ Findings from running MPF (already reflected in the pages):
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: modes and built-in modes,
-   events and conditions, shots and scoring, shows, debugging and validation errors.
+1. Task guides: events and conditions, shots and scoring, shows, debugging and validation errors.
 2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.
 3. Later: mpf-gmc and mpf-monitor.
