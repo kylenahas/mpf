@@ -1,0 +1,20 @@
+{{ define "main" }}
+{{ partial "crumbs.html" . }}
+<article class="doc">
+  <h1>{{ .Title }}</h1>
+  {{ partial "meta.html" . }}
+  {{ .Content }}
+  {{ if not .Params.hideChildren }}
+  {{ $children := .Pages.ByWeight }}
+  {{ if and $children (not (findRE "<table" .Content)) }}
+  <h2>In this section</h2>
+  <ul class="children">
+    {{ range $children }}
+    <li><a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Params.summary }} <span class="muted">· {{ . | truncate 140 }}</span>{{ end }}</li>
+    {{ end }}
+  </ul>
+  {{ end }}
+  {{ end }}
+  {{ partial "foot.html" . }}
+</article>
+{{ end }}

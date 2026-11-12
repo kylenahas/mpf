@@ -1,0 +1,9 @@
+{{ $current := . }}
+<ul>
+  {{ range site.Home.Sections.ByWeight }}
+  <li class="group">
+    <a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} class="current"{{ end }}>{{ .Title }}</a>
+    {{ partial "sidebar-tree.html" (dict "section" . "current" $current) }}
+  </li>
+  {{ end }}
+</ul>

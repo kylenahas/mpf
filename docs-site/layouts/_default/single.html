@@ -1,0 +1,9 @@
+{{ define "main" }}
+{{ partial "crumbs.html" . }}
+<article class="doc">
+  <h1>{{ .Title }}</h1>
+  {{ partial "meta.html" . }}
+  {{ .Content }}
+  {{ partial "foot.html" . }}
+</article>
+{{ end }}

@@ -1,0 +1,23 @@
+baseURL = "/"
+title = "MPF Docs"
+locale = "en"
+disableKinds = ["taxonomy", "term", "RSS"]
+enableGitInfo = false
+
+[outputs]
+  home = ["HTML", "JSON"]
+
+[markup]
+  [markup.goldmark.renderer]
+    # generated reference pages use <span id>, <small> and <br>
+    unsafe = true
+  [markup.highlight]
+    noClasses = false
+    style = "github"
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+
+[params]
+  mpfVersion = "0.82.0.dev0"
+  description = "Documentation for building pinball machines with the Mission Pinball Framework."

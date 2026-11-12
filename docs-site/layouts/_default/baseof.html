@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="{{ site.Language.Locale | default "en" }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} · {{ site.Title }}{{ end }}</title>
+  <meta name="description" content="{{ with .Params.summary }}{{ . }}{{ else }}{{ site.Params.description }}{{ end }}">
+  <script>
+    try { var t = localStorage.getItem("mpf-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  {{ with resources.Get "css/site.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}">{{ end }}
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="nav-toggle" aria-label="Open navigation">☰</button>
+    <a class="brand" href="{{ "/" | relURL }}">{{ site.Title }}</a>
+    <span class="version">v{{ site.Params.mpfVersion }}</span>
+    <div class="search">
+      <input id="search" type="search" placeholder="Search docs (press /)" autocomplete="off" aria-label="Search">
+      <ul id="results" hidden></ul>
+    </div>
+    <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode">◐</button>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Site">
+      {{ partial "sidebar.html" . }}
+    </nav>
+    <div class="pg">
+      <main class="content">
+        {{ block "main" . }}{{ end }}
+      </main>
+      {{ if and (not .IsHome) (gt (len .TableOfContents) 40) }}
+      <aside class="toc-col">
+        <div class="toc-title">On this page</div>
+        <div class="toc">{{ .TableOfContents }}</div>
+      </aside>
+      {{ end }}
+    </div>
+  </div>
+  <script>window.MPF_SEARCH_INDEX = "{{ "index.json" | relURL }}?v={{ now.Unix }}";</script>
+  {{ with resources.Get "js/site.js" | minify | fingerprint }}<script src="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}"></script>{{ end }}
+  {{ if .Store.Get "hasMermaid" }}
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+    const dark = document.documentElement.dataset.theme === "dark" ||
+      (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+    mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+  </script>
+  {{ end }}
+</body>
+</html>

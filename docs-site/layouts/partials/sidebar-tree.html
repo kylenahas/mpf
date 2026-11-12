@@ -1,0 +1,18 @@
+{{/* Children of a section. Sub-sections expand only on the path to the current page, so the
+     generated reference (hundreds of pages) does not flood the sidebar. */}}
+{{ $section := .section }}
+{{ $current := .current }}
+{{ $open := or (eq $section.RelPermalink $current.RelPermalink) ($current.IsDescendant $section) }}
+{{ $top := eq $section.Parent.RelPermalink site.Home.RelPermalink }}
+{{ if or $open $top }}
+<ul>
+  {{ range $section.Pages.ByWeight }}
+  <li>
+    <a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} class="current" aria-current="page"{{ end }}>{{ .Title }}</a>
+    {{ if .IsSection }}{{ if or (eq .RelPermalink $current.RelPermalink) ($current.IsDescendant .) }}
+      {{ partial "sidebar-tree.html" (dict "section" . "current" $current) }}
+    {{ end }}{{ end }}
+  </li>
+  {{ end }}
+</ul>
+{{ end }}

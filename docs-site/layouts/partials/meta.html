@@ -1,0 +1,7 @@
+{{ if or .Params.generated .Params.verified .Params.unverified }}
+<div class="meta">
+  {{ if .Params.generated }}<span class="pill gen">Generated from source</span>{{ end }}
+  {{ with .Params.verified }}<span class="pill ok">Verified: {{ . }}</span>{{ end }}
+  {{ with .Params.unverified }}<span class="pill warn">Not yet run: {{ . }}</span>{{ end }}
+</div>
+{{ end }}
