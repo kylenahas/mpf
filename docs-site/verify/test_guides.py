@@ -202,5 +202,56 @@ class TestAutoLauncher(GuideMachine):
         self.assertEqual(1, self.machine.playfield.balls)
 
 
+class TestSwitchesAndCoils(GuideMachine):
+    """build/switches-and-coils.md: the complete config at the end of the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config("build/switches-and-coils.md"))
+
+    def get_platform(self):
+        return "virtual"
+
+    def driver(self, name):
+        return self.machine.coils[name].hw_driver.state
+
+    def test_page_walkthrough(self):
+        for event in ("knock", "s_action_button_active", "spinner_spin", "sw_flipper_button", "magnet_on",
+                      "magnet_off"):
+            self.mock_event(event)
+        self.advance_time_and_run(1)
+        # 1. NC switch reads inactive at boot
+        self.assertSwitchState("s_coin_door", 0)
+        # 2. button -> knock -> knocker pulses with default_pulse_ms
+        self.hit_and_release_switch("s_action_button")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("s_action_button_active")
+        self.assertEventCalled("knock")
+        self.assertEqual("pulsed_25", self.driver("c_knocker"))
+        # 3. ignore_window_ms: five hits in 100 ms post one event, a later hit posts again
+        for _ in range(5):
+            self.hit_and_release_switch("s_spinner")
+            self.advance_time_and_run(.02)
+        self.assertEventCalled("spinner_spin", times=1)
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_spinner")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("spinner_spin", times=2)
+        # 4. timed switch: tag event at once, magnet_on after 2 s
+        self.hit_switch_and_run("s_left_flipper", 1)
+        self.assertEventCalled("sw_flipper_button")
+        self.assertEventNotCalled("magnet_on")
+        self.advance_time_and_run(1.1)
+        self.assertEventCalled("magnet_on")
+        self.assertEqual("enabled", self.driver("c_magnet"))
+        # 5. max_hold_duration turns the magnet off while the button is still held
+        self.advance_time_and_run(3)
+        self.assertEqual("disabled", self.driver("c_magnet"))
+        # 6. release posts magnet_off
+        self.assertEventNotCalled("magnet_off")
+        self.release_switch_and_run("s_left_flipper", .1)
+        self.assertEventCalled("magnet_off")
+
+
 if __name__ == "__main__":
     unittest.main()
