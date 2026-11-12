@@ -42,9 +42,21 @@
   {{ if .Store.Get "hasMermaid" }}
   <script type="module">
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
-    const dark = document.documentElement.dataset.theme === "dark" ||
-      (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
-    mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default" });
+    // Colour diagrams from the site's CSS tokens so they match light and dark, and redraw on theme toggle.
+    const blocks = [...document.querySelectorAll("pre.mermaid")];
+    blocks.forEach(b => { b.dataset.src = b.textContent; });
+    async function draw() {
+      const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim();
+      mermaid.initialize({ startOnLoad: false, theme: "base", themeVariables: {
+        background: v("--bg"), primaryColor: v("--bg-soft"), primaryTextColor: v("--fg"),
+        primaryBorderColor: v("--muted"), lineColor: v("--muted"), textColor: v("--fg"),
+        edgeLabelBackground: v("--bg"), fontFamily: getComputedStyle(document.body).fontFamily } });
+      blocks.forEach(b => { b.removeAttribute("data-processed"); b.textContent = b.dataset.src; });
+      await mermaid.run({ nodes: blocks });
+    }
+    draw();
+    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
   </script>
   {{ end }}
 </body>

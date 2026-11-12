@@ -4,5 +4,5 @@ weight: 2
 summary: "Task guides, each ending in a config from MPF's tested examples."
 ---
 
-Task-focused guides. Hardware first (FAST); the rest are platform-neutral. More topics are on the way: ball devices
-and the playfield, switches and coils, flippers, modes, events, shots and scoring, shows, and debugging.
+Task-focused guides. Hardware first (FAST); the rest are platform-neutral. More topics are on the way:
+switches and coils, flippers, modes, events, shots and scoring, shows, and debugging.

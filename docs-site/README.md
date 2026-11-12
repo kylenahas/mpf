@@ -14,6 +14,7 @@ docs-site/
   assets/               css/site.css, js/site.js (search, theme toggle, copy buttons; minified + fingerprinted)
   tools/gen_reference.py  source -> reference pages
   tools/check_docs.py     YAML snippet + config key + internal link checks (static)
+  verify/test_guides.py   runs each guide's complete config on MPF (read from the page) and checks the described behavior
 ```
 
 ## Build
@@ -24,6 +25,7 @@ From the repository root. The repo's `venv/` (git-ignored) has the local MPF ins
 ```bash
 venv/Scripts/python -I docs-site/tools/gen_reference.py . docs-site/content
 venv/Scripts/python -I docs-site/tools/check_docs.py . docs-site/content
+venv/Scripts/python -I -m unittest discover -s docs-site/verify
 hugo server -s docs-site
 ```
 
@@ -36,13 +38,16 @@ Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matte
 - Config snippets come from `mpf/tests/machine_files/**` or are run on MPF before publishing. Mark anything not run
   with `unverified:` front matter or a `warn` callout.
 - `check_docs.py` must pass.
+- A page with `verified:` front matter has a test class in `verify/test_guides.py` that reads its config from the
+  page. Change the page, rerun the tests.
 
 ## Status (2026-11-12)
 
 Done:
 - Get started: install-and-run, machine-folder, first-machine (verified: boots and plays a full 3-ball game on
   `mpf game -X` and in `MpfGameTestCase`), config-files.
-- Build: fast-hardware (from test configs; not run on hardware).
+- Build: fast-hardware (from test configs; not run on hardware); ball-devices (verified: trough, three plunger
+  styles, saucer, playfield switches, ball search).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -58,9 +63,12 @@ Findings from running MPF (already reflected in the pages):
 - With no playfield switch, a ball counts as on the playfield after the 10 s default eject timeout.
 - `game` mode is always loaded: `mpfconfig.yaml` has `modes: [attract, game]` and user lists are added to it.
 - `switch_player:` can press switches on a schedule; useful with no keyboard/monitor.
+- Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
+- Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
+  `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: ball devices and playfield, switches and coils, flippers and autofire, modes and built-in modes,
+1. Task guides: switches and coils, flippers and autofire, modes and built-in modes,
    events and conditions, shots and scoring, shows, debugging and validation errors.
 2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.
