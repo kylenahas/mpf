@@ -1018,6 +1018,128 @@ class TestModeOwnStartEvent(GuideMachine):
             self.advance_time_and_run(1)
 
 
+DEBUG_PAGE = "build/debugging.md"
+FIRST = "get-started/first-machine.md"
+
+# (name, replacement applied to the first-machine config, text quoted on the debugging page, fails at boot?)
+MISTAKES = [
+    ("tab", ("  s_start:\n    number:", "  s_start:\n\tnumber:"),
+     "while scanning for the next token found character that cannot start any token"),
+    ("indent", ("    eject_targets: playfield\n", "   eject_targets: playfield\n"),
+     "while parsing a block mapping"),
+    ("duplicate", ("  s_trough3:\n    number:\n", "  s_trough3:\n    number:\n  s_trough3:\n    number:\n"),
+     'found duplicate key "s_trough3"'),
+    ("colon", ("  balls_installed: 3", "  balls_installed 3"),
+     'Your config contains a value for the setting "machine:b", but this is not a valid setting name.'),
+    ("version", ("#config_version=6\n", ""), "Version mismatch. Expected: #config_version=6 Actual:"),
+    ("section", ("switches:", "switchs:"),
+     'but that section name is unknown. Did you mean "switches:" instead?'),
+    ("setting", ("    eject_coil: c_trough_eject\n", "    eject_coil: c_trough_eject\n    eject_coils: c_trough_eject\n"),
+     'Your config contains a value for the setting "ball_devices:bd_trough:eject_coils", but this is not a valid '
+     'setting name.'),
+    ("device", ("eject_coil: c_trough_eject", "eject_coil: c_trough_ejct"),
+     'Device "c_trough_ejct" not found in "coils:" section in your config.'),
+    ("device_path", ("eject_coil: c_trough_eject", "eject_coil: c_trough_ejct"),
+     'Entry ball_device_ejector_pulse:ball_device_ejector_pulse:eject_coil = "c_trough_ejct"'),
+    ("event_space", ("    tags: trough, drain, home\n", "    tags: trough, drain, home\n    eject_all_events: ball started\n"),
+     'Cannot handle events with spaces in the event name, please remedy "ball started"'),
+    ("time", ("    tags: trough, drain, home\n", "    tags: trough, drain, home\n    eject_timeouts: 2 secs\n"),
+     "Cannot convert value to ms."),
+    ("bool", ("    tags: start\n", "    tags: start\n    ignore_during_ball_search: maybe\n"),
+     "Cannot convert value to boolean."),
+    ("bool_full", ("    tags: start\n", "    tags: start\n    ignore_during_ball_search: maybe\n"),
+     'Config File Error in ConfigValidator: Config validation error: Entry switches:s_start:ignore_during_ball_search = '
+     '"maybe" is not valid. Cannot convert value to boolean. Error Code: CFE-ConfigValidator-13'),
+    ("empty_item", ("ball_switches: s_trough1, s_trough2, s_trough3", "ball_switches: s_trough1, , s_trough3"),
+     "List contains an empty element."),
+    ("number", ("  s_trough1:\n    number:\n", "  s_trough1:\n    tags: x\n"),
+     'Required setting "number:" is missing from section "switches:s_trough1:" in your config.'),
+    ("no_eject", ("    eject_coil: c_trough_eject\n", ""),
+     'Configuration error in bd_trough ball device. Device needs an eject_coil, a hold_coil, or "mechanical_eject: '
+     'True"'),
+]
+
+
+def squash(text):
+    return " ".join(str(text).split())
+
+
+class TestDebuggingMessages(unittest.TestCase):
+    """build/debugging.md: each mistake stops MPF at startup with the message quoted on the page."""
+
+    def boot_error(self, config):
+        class Boot(GuideMachine):
+            def runTest(self):
+                pass
+        Boot.machine_dir = make_machine(config)
+        test = Boot("runTest")
+        try:
+            test.setUp()
+            test.advance_time_and_run(1)
+        except BaseException as e:  # noqa: BLE001
+            parts, cause = [str(e)], e.__cause__ or e.__context__
+            while cause is not None:
+                parts.append(str(cause))
+                cause = cause.__cause__ or cause.__context__
+            return squash(" ".join(parts))
+        finally:
+            try:
+                test.tearDown()
+            except BaseException:  # noqa: BLE001
+                pass
+            shutil.rmtree(Boot.machine_dir, ignore_errors=True)
+        return None
+
+    def test_messages(self):
+        page = squash((CONTENT / DEBUG_PAGE).read_text(encoding="utf-8"))
+        base = full_config(FIRST)
+        for name, (old, new), quoted in MISTAKES:
+            with self.subTest(name):
+                self.assertIn(old, base)
+                self.assertIn(squash(quoted), page, "page does not quote this message")
+                message = self.boot_error(base.replace(old, new, 1))
+                self.assertIsNotNone(message, "MPF started without an error")
+                self.assertIn(squash(quoted), message)
+
+
+class TestDebuggingLateErrors(GuideMachine):
+    """build/debugging.md: missing default_source_device passes startup and fails when a game starts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config(FIRST).replace("    default_source_device: bd_trough\n", ""))
+
+    def test_fails_at_game_start(self):
+        quoted = "Missing a source device to request a ball. Did you define a default_source_device in your playfield?"
+        self.assertIn(quoted, (CONTENT / DEBUG_PAGE).read_text(encoding="utf-8"))
+        self.advance_time_and_run(1)
+        self.assertModeRunning("attract")
+        with self.assertRaisesRegex(Exception, re.escape(quoted)):
+            self.hit_and_release_switch("s_start")
+            self.advance_time_and_run(1)
+
+
+class TestDebuggingEmptyTrough(GuideMachine):
+    """build/debugging.md: with the trough empty, start is refused (message checked against the source)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = make_machine(full_config(FIRST).replace(
+            "virtual_platform_start_active_switches: s_trough1, s_trough2, s_trough3\n", ""))
+
+    def test_refused(self):
+        source = (Path(__file__).resolve().parents[2] / "mpf" / "core" / "ball_controller.py").read_text(
+            encoding="utf-8")
+        self.assertIn("BallController denies game start. Not enough \"\n                             \"balls.", source)
+        self.assertIn("BallController denies game start. Balls are not \"\n                             \"in their "
+                      "home positions.", source)
+        self.advance_time_and_run(1)
+        self.assertEqual(0, self.machine.ball_devices["bd_trough"].balls)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.assertIsNone(self.machine.game)
+
+
 class TestEventLowercaseTrue(GuideMachine):
     """build/events.md: lower-case true boots, then fails when the condition is first evaluated."""
 

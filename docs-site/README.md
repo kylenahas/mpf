@@ -43,7 +43,7 @@ Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matte
   (`` `modes/base/config/base.yaml`: ``) before each block; `page_files()` picks those up, and a block labelled
   `config/config.yaml` is the machine config.
 
-## Status (2026-11-12)
+## Status (2026-11-13)
 
 Done:
 - Get started: install-and-run, machine-folder, first-machine (verified: boots and plays a full 3-ball game on
@@ -58,7 +58,8 @@ Done:
   tick/complete, device-state condition, built-in flipper_cancel); shots-and-scoring (verified: variable_player and
   |block, four shot hit events, custom profile, shot group hit/complete/rotate/reset, per-player shot state); shows
   (verified: duration/time steps, fade, show file with token, loops, events_when_completed, shot lights via
-  show_tokens).
+  show_tokens); debugging (verified: 15 config mistakes with the exact message each prints, errors that only appear
+  at first use, empty-trough start refusal from a real `mpf game -X` run).
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
   boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
@@ -100,12 +101,16 @@ Findings from running MPF (already reflected in the pages):
 - Ball end order is `ball_drain`, `ball_will_end` (ball modes stop), `ball_ending`: ball-length modes never see
   `ball_ending`. A mode player keyed to the mode's own start event errors when the mode first starts.
 - Machine-config players register at priority 0, machine `*_events` at 1, mode players at the mode priority.
+- Errors that pass startup and fail at first use: missing `default_source_device` (game start), lower-case
+  `true` in a condition, a mode player on its own start event, single-wound flipper without hold power.
+- `mpf game -t` turns the text UI off despite its help text. Error messages link to missionpinball.org/latest/logs.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: debugging and validation errors.
-2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
+1. Task guides done for the first pass. Candidates for more: multiball and ball locks, ball saves and extra balls,
+   high scores and credits (built-in modes), segment displays and sound/media (needs mpf-gmc).
+2. For developers section (how-events-work done): boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.
 3. Later: mpf-gmc and mpf-monitor.
