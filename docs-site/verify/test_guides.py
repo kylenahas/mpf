@@ -645,6 +645,82 @@ class TestOwnBothFlippersCombo(GuideMachine):
         self.assertEventNotCalled("both_flippers_both")
 
 
+SHOTS_PAGE = "build/shots-and-scoring.md"
+
+
+class TestShotsAndScoring(GuideMachine):
+    """build/shots-and-scoring.md: machine config and both mode files, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        files = {k: v for k, v in page_files(SHOTS_PAGE).items() if k.startswith("modes/")}
+        cls.machine_dir = make_machine(full_config(SHOTS_PAGE), files=files)
+
+    def lanes(self):
+        return [self.machine.shots[n].state_name for n in ("lane1", "lane2", "lane3")]
+
+    def hit(self, switch):
+        self.hit_and_release_switch(switch)
+        self.advance_time_and_run(.1)
+
+    def test_page_walkthrough(self):
+        self.assertEqual(2, len([k for k in page_files(SHOTS_PAGE) if k.startswith("modes/")]))
+        for event in ("lane1_hit", "lane1_unlit_hit", "lane1_default_hit", "lane1_default_unlit_hit",
+                      "top_lanes_complete", "top_lanes_unlit_complete", "top_lanes_lit_complete"):
+            self.mock_event(event)
+        self.advance_time_and_run(1)
+        self.hit("s_lane1")
+        self.assertEventNotCalled("lane1_hit")
+        self.start_game()
+        self.advance_time_and_run(1)
+        player = self.machine.game.player
+        # group "complete" with all unlit at game start
+        self.assertEventCalled("top_lanes_complete")
+        self.assertEventCalled("top_lanes_unlit_complete")
+        self.assertEqual(0, player.score)
+        self.hit("s_left_sling")
+        self.assertEqual(10, player.score)
+        self.hit("s_lane1")
+        self.assertEqual(110, player.score)
+        self.assertEqual(["lit", "unlit", "unlit"], self.lanes())
+        for event in ("lane1_hit", "lane1_unlit_hit", "lane1_default_hit", "lane1_default_unlit_hit"):
+            self.assertEventCalled(event)
+        self.hit("s_lane1")
+        self.assertEqual(210, player.score)
+        self.assertEqual(["lit", "unlit", "unlit"], self.lanes())
+        self.hit("s_left_flipper")
+        self.assertEqual(["unlit", "unlit", "lit"], self.lanes())
+        self.hit("s_right_flipper")
+        self.assertEqual(["lit", "unlit", "unlit"], self.lanes())
+        self.assertEventNotCalled("top_lanes_lit_complete")
+        self.hit("s_lane2")
+        self.hit("s_lane3")
+        self.assertEventCalled("top_lanes_lit_complete")
+        self.assertEqual(5410, player.score)
+        self.assertEqual(["unlit", "unlit", "unlit"], self.lanes())
+        for _ in range(4):
+            self.hit("s_ramp")
+        self.assertEqual(61410, player.score)
+        self.assertEqual("super", self.machine.shots["ramp"].state_name)
+        self.assertEqual(2, player.ramp_supers)
+        # |block in the higher-priority mode
+        self.post_event("start_double_scoring")
+        self.advance_time_and_run(.1)
+        self.hit("s_left_sling")
+        self.assertEqual(61430, player.score)
+        self.post_event("stop_double_scoring")
+        self.advance_time_and_run(.1)
+        self.hit("s_left_sling")
+        self.assertEqual(61440, player.score)
+        # shot state kept for the player on the next ball
+        self.advance_time_and_run(10)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual("super", self.machine.shots["ramp"].state_name)
+        self.assertEqual(61440, player.score)
+
+
 class TestEventLowercaseTrue(GuideMachine):
     """build/events.md: lower-case true boots, then fails when the condition is first evaluated."""
 

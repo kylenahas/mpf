@@ -55,7 +55,8 @@ Done:
   mode files read from the page, game/non-game modes, restart_on_next_ball, mode-scoped event_player, two startup
   errors); events (verified: handler delays, event_player forms, event args via value/type, conditions on event
   args and current_player, .N priority order; "More examples": drop target bank, counter hit/complete, timer
-  tick/complete, device-state condition, built-in flipper_cancel).
+  tick/complete, device-state condition, built-in flipper_cancel); shots-and-scoring (verified: variable_player and
+  |block, four shot hit events, custom profile, shot group hit/complete/rotate/reset, per-player shot state).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -85,12 +86,14 @@ Findings from running MPF (already reflected in the pages):
 - `events_when_complete` / `events_when_hit` replace the default `logicblock_<name>_complete` / `_hit` events.
 - `mpfconfig.yaml` defines `combo_switches: both_flippers` (tags `left_flipper` + `right_flipper` -> `flipper_cancel`)
   and `timed_switches: flipper_cradle`; user entries with those names are merged into them.
+- A shot group posts `<group>_complete` / `<group>_unlit_complete` at every ball start (all members unlit); rules
+  should use `<group>_lit_complete`. Shot states are player variables (`shot_<name>`) and survive the ball.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides: shots and scoring, shows, debugging and validation errors.
+1. Task guides: shows, debugging and validation errors.
 2. For developers section: boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.
 3. Later: mpf-gmc and mpf-monitor.
