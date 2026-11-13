@@ -4,5 +4,5 @@ weight: 2
 summary: "Task guides, each ending in a config from MPF's tested examples."
 ---
 
-Task-focused guides. Hardware first (FAST); the rest are platform-neutral. More topics are on the way: shows
-and debugging.
+Task-focused guides. Hardware first (FAST); the rest are platform-neutral. More topics are on the way:
+debugging.

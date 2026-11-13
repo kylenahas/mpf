@@ -14,6 +14,9 @@ react to. You build game rules by connecting the two.
 "in the test run" statement is checked by `docs-site/verify/test_guides.py`.
 {{< /tip >}}
 
+For what happens inside MPF when an event is posted (queue order, boolean, relay and queue events, and a full
+game's event timeline), see [how events work](/architecture/how-events-work/).
+
 ## Where events come from
 
 - **Devices and modes.** Each config reference page has an **Events posted** section, and the

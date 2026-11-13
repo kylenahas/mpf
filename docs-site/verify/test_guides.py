@@ -36,7 +36,8 @@ def full_config(page):
     return [b for b in yaml_blocks(page) if b.startswith("#config_version")][-1]
 
 
-FILE_BLOCK = re.compile(r"^`((?:modes|config)/[\w/.-]+\.yaml)`:[ \t]*\n\s*\n```yaml\s*\n(.*?)^```", re.M | re.S)
+FILE_BLOCK = re.compile(r"^`((?:modes|config|shows)/[\w/.-]+\.(?:yaml|py))`:[ \t]*\n\s*\n```(?:yaml|python)\s*\n(.*?)^```",
+                        re.M | re.S)
 
 
 def page_files(page):
@@ -719,6 +720,302 @@ class TestShotsAndScoring(GuideMachine):
         self.assertBallNumber(2)
         self.assertEqual("super", self.machine.shots["ramp"].state_name)
         self.assertEqual(61440, player.score)
+
+
+SHOWS_PAGE = "build/shows.md"
+
+
+def shows_machine(mode_text_change=None):
+    files = {k: v for k, v in page_files(SHOWS_PAGE).items() if k.startswith(("modes/", "shows/"))}
+    if mode_text_change:
+        key = "modes/base/config/base.yaml"
+        files[key] = mode_text_change(files[key])
+    return make_machine(full_config(SHOWS_PAGE), files=files)
+
+
+class ShowsMachine(GuideMachine):
+    def color(self, light):
+        return self.machine.lights[light].get_color().hex
+
+    def start_ball_now(self):
+        """Press start without the 1 s MpfGameTestCase.start_game() advances, so show timing can be sampled."""
+        self.hit_and_release_switch("s_start")
+        self.machine_run()
+        self.assertIsNotNone(self.machine.game)
+
+
+class TestShows(ShowsMachine):
+    """build/shows.md: machine config, show file and base mode, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = shows_machine()
+
+    def test_page_walkthrough(self):
+        self.assertEqual({"modes/base/config/base.yaml", "shows/flash_light.yaml"},
+                         {k for k in page_files(SHOWS_PAGE) if not k.startswith("config/")})
+        self.mock_event("target_flash_done")
+        self.mock_event("start_pulse_done")
+        # attract sweep
+        self.advance_time_and_run(.1)
+        self.assertEqual(("ffffff", "000000"), (self.color("l_lane1"), self.color("l_lane2")))
+        self.advance_time_and_run(.5)
+        self.assertEqual(("000000", "ffffff"), (self.color("l_lane1"), self.color("l_lane2")))
+        self.advance_time_and_run(.5)
+        self.assertEqual(("ffffff", "000000"), (self.color("l_lane1"), self.color("l_lane2")))
+        # game: sweep stopped, start_pulse fades in and plays once
+        self.start_ball_now()
+        self.advance_time_and_run(.1)
+        self.assertEqual("00007f", self.color("l_start"))
+        self.assertEqual(("000000", "000000"), (self.color("l_lane1"), self.color("l_lane2")))
+        self.advance_time_and_run(.1)
+        self.assertEqual("0000ff", self.color("l_start"))
+        self.advance_time_and_run(1)
+        self.assertEqual("000000", self.color("l_start"))
+        self.advance_time_and_run(3)
+        self.assertEqual("000000", self.color("l_start"))
+        self.assertEventCalled("start_pulse_done", times=1)
+        # shot light follows the shot state
+        self.hit_and_release_switch("s_lane1")
+        self.advance_time_and_run(.1)
+        self.assertEqual(("ffffff", "000000"), (self.color("l_lane1"), self.color("l_lane2")))
+        # target flash: three red flashes, then done and off
+        self.hit_and_release_switch("s_target")
+        samples = []
+        for _ in range(14):
+            self.advance_time_and_run(.125)
+            samples.append(self.color("l_target"))
+        self.assertEqual(["ff0000", "000000", "000000", "ff0000", "ff0000", "000000", "000000", "ff0000", "ff0000",
+                          "000000", "000000", "000000", "000000", "000000"], samples)
+        self.assertEventCalled("target_flash_done")
+        # lane light still lit on ball 2
+        self.advance_time_and_run(10)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual("ffffff", self.color("l_lane1"))
+
+
+class TestShowWithoutLoops(ShowsMachine):
+    """build/shows.md warning: without `loops`, start_pulse repeats every 2 s."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = shows_machine(lambda text: text.replace("      loops: 0\n", ""))
+
+    def test_repeats(self):
+        self.advance_time_and_run(1)
+        self.start_ball_now()
+        self.advance_time_and_run(.5)
+        self.assertEqual("0000ff", self.color("l_start"))
+        self.advance_time_and_run(1)
+        self.assertEqual("000000", self.color("l_start"))
+        self.advance_time_and_run(1)
+        self.assertEqual("0000ff", self.color("l_start"))
+
+
+HOW_EVENTS_PAGE = "architecture/how-events-work.md"
+QUEUE_RELAY = "queue_relay_player:\n  ball_ending:\n    post: bonus_start\n    wait_for: bonus_done\n"
+
+
+def how_events_machine(config_extra=None, files_extra=None):
+    files = {k: v for k, v in page_files(HOW_EVENTS_PAGE).items() if k.startswith("modes/")}
+    files.update(files_extra or {})
+    config = full_config(HOW_EVENTS_PAGE)
+    if config_extra:
+        config = merge_config(config, config_extra)
+    return make_machine(config, files=files)
+
+
+class HowEventsMachine(GuideMachine):
+    def setUp(self):
+        from mpf.core.events import EventManager
+        self.posted = []
+        original = EventManager._post
+        posted = self.posted
+
+        def recording_post(manager, event, ev_type, callback, **kwargs):
+            posted.append(event)
+            return original(manager, event, ev_type, callback, **kwargs)
+
+        self._original_post = original
+        EventManager._post = recording_post
+        super().setUp()
+
+    def tearDown(self):
+        from mpf.core.events import EventManager
+        EventManager._post = self._original_post
+        super().tearDown()
+
+    def press_start(self):
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+
+
+class TestHowEventsWork(HowEventsMachine):
+    """architecture/how-events-work.md: machine config, base mode, bonus and start_lock modes with their code."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = how_events_machine()
+
+    def test_files_on_page(self):
+        self.assertEqual({"config/config.yaml", "modes/base/config/base.yaml", "modes/bonus/config/bonus.yaml",
+                          "modes/bonus/code/bonus.py", "modes/start_lock/config/start_lock.yaml",
+                          "modes/start_lock/code/start_lock.py"}, set(page_files(HOW_EVENTS_PAGE)))
+
+    def test_depth_first_order(self):
+        order = []
+        for name in ("chain_a", "chain_a_child", "chain_a_grandchild", "chain_b"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: order.append(name))
+        self.advance_time_and_run(1)
+        self.machine.events.post("chain_a")
+        self.machine.events.post("chain_b")
+        self.advance_time_and_run(.1)
+        self.assertEqual(["chain_a", "chain_a_child", "chain_a_grandchild", "chain_b"], order)
+
+    def test_boolean_start_lock(self):
+        self.mock_event("start_refused")
+        self.advance_time_and_run(1)
+        self.hit_switch_and_run("s_coin_door", .1)
+        self.press_start()
+        self.assertIsNone(self.machine.game)
+        self.assertEventCalledWith("start_refused", reason="coin door open")
+        self.release_switch_and_run("s_coin_door", .1)
+        self.press_start()
+        self.assertIsNotNone(self.machine.game)
+
+    def test_relay_ball_save(self):
+        seen = []
+        self.machine.events.add_handler("ball_drain", lambda balls, **kwargs: seen.append(balls), priority=0)
+        self.mock_event("ball_save_first_save_saving_ball")
+        self.advance_time_and_run(1)
+        self.press_start()
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.drain_all_balls()
+        self.advance_time_and_run(1)
+        self.assertEqual([0], seen)
+        self.assertEventCalled("ball_save_first_save_saving_ball")
+        self.assertBallNumber(1)
+        self.advance_time_and_run(12)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEqual([0, 1], seen)
+        self.assertBallNumber(2)
+
+    def test_bonus_queue_and_timeline(self):
+        times = {}
+        self.mock_event("bonus_advanced")
+        self.advance_time_and_run(1)
+        self.press_start()
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(12)
+        self.assertEventCalledWith("bonus_advanced", source="target")
+        for name in ("ball_will_end", "bonus_counting", "bonus_counted", "ball_ended", "ball_started"):
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: times.setdefault(name, self.machine.clock.get_time()), priority=-100)
+        drained = self.machine.clock.get_time()
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        rel = {k: round(v - drained, 1) for k, v in times.items()}
+        self.assertEqual(rel["ball_will_end"], rel["bonus_counting"])
+        for name in ("bonus_counted", "ball_ended", "ball_started"):
+            self.assertAlmostEqual(rel["bonus_counting"] + 2, rel[name], delta=.11)
+        # the rest of the game, then check the documented timeline is an ordered subsequence of what was posted
+        for _ in (2, 3):
+            self.hit_and_release_switch("s_target")
+            self.advance_time_and_run(12)
+            self.drain_all_balls()
+            self.advance_time_and_run(4)
+        self.assertGameIsNotRunning()
+        timeline = [
+            "init_phase_1", "init_phase_5", "init_done", "machine_reset_phase_1", "machine_reset_phase_3",
+            "reset_complete", "mode_attract_will_start", "mode_attract_starting", "mode_attract_started",
+            "collecting_balls_complete",
+            "request_to_start_game", "game_start", "mode_game_will_start", "mode_game_starting", "mode_attract_will_stop",
+            "mode_attract_stopping", "mode_attract_stopped", "mode_game_started", "game_will_start", "game_starting",
+            "player_add_request", "player_adding", "player_added", "game_started", "player_turn_will_start",
+            "player_turn_starting", "player_turn_started",
+            "ball_will_start", "ball_starting", "mode_base_will_start", "mode_base_starting", "mode_base_started",
+            "balls_in_play", "ball_started", "ball_save_first_save_enabled", "single_player_ball_started",
+            "ball_start_target", "balldevice_balls_available", "balldevice_bd_trough_ejecting_ball",
+            "playfield_active", "balldevice_bd_trough_ball_eject_success", "balldevice_playfield_ball_enter",
+            "ball_save_first_save_grace_period", "ball_save_first_save_disabled",
+            "balldevice_captured_from_playfield", "balldevice_bd_trough_ball_enter", "ball_drain", "ball_will_end",
+            "mode_base_will_stop", "mode_base_stopping", "mode_base_stopped", "ball_ending", "ball_ended",
+            "player_turn_will_end", "player_turn_ending", "player_turn_ended",
+            "game_will_end", "game_ending", "game_ended", "mode_game_will_stop", "mode_game_stopping",
+            "mode_attract_will_start", "mode_attract_starting", "mode_attract_started", "collecting_balls_complete",
+            "mode_game_stopped"]
+        position = 0
+        for name in timeline:
+            self.assertIn(name, self.posted[position:], "timeline event {} missing after position {}".format(
+                name, position))
+            position = self.posted.index(name, position) + 1
+
+
+class TestQueueRelayInMachineConfig(HowEventsMachine):
+    """The queue_relay_player example, added to the machine config: the ball waits for bonus_done."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = how_events_machine(config_extra=QUEUE_RELAY)
+
+    def test_holds_ball_ending(self):
+        self.assertIn(QUEUE_RELAY.strip(), "\n".join(yaml_blocks(HOW_EVENTS_PAGE)))
+        self.mock_event("bonus_start")
+        self.advance_time_and_run(1)
+        self.press_start()
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(12)
+        self.drain_all_balls()
+        self.advance_time_and_run(5)
+        self.assertEventCalled("bonus_start")
+        self.assertBallNumber(1)
+        self.post_event("bonus_done")
+        self.advance_time_and_run(1)
+        self.assertBallNumber(2)
+
+
+class TestQueueRelayInBaseMode(HowEventsMachine):
+    """The warning: in the base mode (stops on ball_will_end) the same queue_relay_player never sees ball_ending."""
+
+    @classmethod
+    def setUpClass(cls):
+        base = page_files(HOW_EVENTS_PAGE)["modes/base/config/base.yaml"] + "\n" + QUEUE_RELAY
+        cls.machine_dir = how_events_machine(files_extra={"modes/base/config/base.yaml": base})
+
+    def test_never_posts(self):
+        self.mock_event("bonus_start")
+        self.advance_time_and_run(1)
+        self.press_start()
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(12)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEventNotCalled("bonus_start")
+        self.assertBallNumber(2)
+
+
+class TestModeOwnStartEvent(GuideMachine):
+    """The note: a mode's player keyed to the mode's own start event is refused when the mode first starts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = modes_machine({"modes/skillshot/config/skillshot.yaml":
+                                         page_files(MODES_PAGE)["modes/skillshot/config/skillshot.yaml"].replace(
+                                             "event_player:\n", "event_player:\n  ball_started: oops\n")})
+
+    def test_refused_at_mode_start(self):
+        self.advance_time_and_run(1)
+        self.assertModeRunning("attract")
+        with self.assertRaisesRegex(Exception, 'Change the event_player: ball_started: event name to\\s+'
+                                               '"mode_skillshot_started:"'):
+            self.start_game()
+            self.advance_time_and_run(1)
 
 
 class TestEventLowercaseTrue(GuideMachine):
