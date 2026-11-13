@@ -60,7 +60,9 @@ Done:
   (verified: duration/time steps, fade, show file with token, loops, events_when_completed, shot lights via
   show_tokens); debugging (verified: 15 config mistakes with the exact message each prints, errors that only appear
   at first use, empty-trough start refusal from a real `mpf game -X` run); multiball (verified: two-ball VUK lock,
-  lock-full starts a 3-ball multiball from the lock and trough, shoot_again, ball_lost/ended, lock reset per player).
+  lock-full starts a 3-ball multiball from the lock and trough, shoot_again, ball_lost/ended, lock reset per player);
+  ball-saves-and-extra-balls (verified: save timeline, saving and early saves, extra ball light/collect/replay,
+  group limits, lit memory).
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
   boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
@@ -110,12 +112,19 @@ Findings from running MPF (already reflected in the pages):
   `TestEventCorrectionsStillHold` fails once MPF is fixed, so the correction can be removed.
 - A multiball lock's count is per player and survives the multiball; without `reset_count_for_current_player_events`
   the lock stays full for the rest of the game.
+- `playfield_active` is only posted when a switch is hit while the playfield count is 0; if the eject timeout confirms
+  the ball first it never comes. A ball save with `timer_start_events: playfield_active` then never times out. Use
+  the feeding device's `balldevice_<name>_ball_eject_success`.
+- MPF bug: `extra_balls: max_per_game` (default 1) only counts that entry's own `award_events`; light-and-collect via
+  the group is unlimited unless the group has `max_per_game` (the `ExtraBall.light` docstring says lighting counts).
+- MPF bug: `ExtraBallGroup.award` sets player var `extra_ball_group_{}_num_lit` (missing `.format`), posting
+  `player_extra_ball_group_{}_num_lit`.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides done for the first pass. Candidates for more: ball saves and extra balls,
+1. Task guides done for the first pass. Candidates for more:
    high scores and credits (built-in modes), segment displays and sound/media (needs mpf-gmc).
 2. For developers section (how-events-work done): boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.

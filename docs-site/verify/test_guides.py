@@ -1144,6 +1144,211 @@ class TestMultiballWithoutReset(MultiballMachine):
         self.assertEqual(score, self.machine.game.player.score)
 
 
+BS_PAGE = "build/ball-saves-and-extra-balls.md"
+GROUP_LIMIT = "    max_per_game: 1\n"
+
+
+def bs_machine(without_group_limit=False):
+    files = {k: v for k, v in page_files(BS_PAGE).items() if k.startswith("modes/")}
+    config = full_config(BS_PAGE)
+    if without_group_limit:
+        config = config.replace("    award_lit_events: s_eb_collect_active\n" + GROUP_LIMIT,
+                                "    award_lit_events: s_eb_collect_active\n")
+    return make_machine(config, files=files)
+
+
+class BallSaveMachine(GuideMachine):
+    def setUp(self):
+        super().setUp()
+        self.log = []
+        self.t0 = 0
+        for name in ("ball_save_start_save_enabled", "ball_save_start_save_timer_start", "ball_save_start_save_hurry_up",
+                     "ball_save_start_save_grace_period", "ball_save_start_save_disabled",
+                     "ball_save_start_save_saving_ball", "extra_ball_target_eb_lit", "extra_ball_group_main_lit_awarded",
+                     "extra_ball_group_main_lit", "extra_ball_group_main_unlit", "extra_ball_group_main_awarded",
+                     "extra_ball_awarded", "extra_ball_award_disabled", "extra_ball_target_eb_award_disabled",
+                     "extra_ball_group_main_award_disabled", "ball_started", "ball_ended"):
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: self.log.append(
+                    (round(self.machine.clock.get_time() - self.t0, 1), name,
+                     {k: v for k, v in kwargs.items() if k in ("ball", "is_extra_ball", "balls", "early_save")})),
+                priority=-50)
+
+    def names(self, since=0):
+        return [n for t, n, a in self.log if t >= since]
+
+    def eb_names(self, start=0):
+        return [n for t, n, a in self.log[start:] if n.startswith("extra_ball")]
+
+    def eb_round(self):
+        self.hit_and_release_switch("s_eb_target")
+        self.advance_time_and_run(.5)
+        self.hit_and_release_switch("s_eb_collect")
+        self.advance_time_and_run(.5)
+
+
+class TestBallSavesAndExtraBalls(BallSaveMachine):
+    """build/ball-saves-and-extra-balls.md: machine config and base mode, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = bs_machine()
+
+    def test_ball_save_timeline_and_saves(self):
+        self.advance_time_and_run(1)
+        self.t0 = self.machine.clock.get_time()
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(2)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(14)
+        timeline = [(t, n) for t, n, a in self.log if n.startswith("ball_save") or n == "ball_started"]
+        self.assertEqual([(0.0, "ball_started"), (0.0, "ball_save_start_save_enabled"),
+                          (2.0, "ball_save_start_save_timer_start"), (9.0, "ball_save_start_save_hurry_up"),
+                          (12.0, "ball_save_start_save_grace_period"), (14.0, "ball_save_start_save_disabled")],
+                         timeline)
+        # ball 2: a drain during the save is saved once, the next drain ends the ball
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(2)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        saving = [a for t, n, a in self.log if n == "ball_save_start_save_saving_ball"]
+        self.assertEqual([{"balls": 1, "early_save": False}], saving)
+        self.assertBallNumber(2)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertBallNumber(3)
+        # ball 3: early save on the outlane
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_left_outlane")
+        self.advance_time_and_run(4)
+        self.assertEqual({"balls": 1, "early_save": True},
+                         [a for t, n, a in self.log if n == "ball_save_start_save_saving_ball"][-1])
+        self.assertEqual(2, self.machine.playfield.balls)
+        self.assertEqual(1, self.machine.game.balls_in_play)
+        self.drain_one_ball()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(3)
+
+    def test_extra_ball(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        player = self.machine.game.player
+        start = len(self.log)
+        self.hit_and_release_switch("s_eb_target")
+        self.advance_time_and_run(.5)
+        self.assertEqual(["extra_ball_target_eb_lit", "extra_ball_group_main_lit_awarded", "extra_ball_group_main_lit"],
+                         self.eb_names(start))
+        self.hit_and_release_switch("s_eb_collect")
+        self.advance_time_and_run(.5)
+        self.assertEqual(["extra_ball_target_eb_lit", "extra_ball_group_main_lit_awarded", "extra_ball_group_main_lit",
+                          "extra_ball_group_main_unlit", "extra_ball_group_main_awarded", "extra_ball_awarded"],
+                         self.eb_names(start))
+        self.assertEqual(1, player.extra_balls)
+        # the group limit refuses a second one: the light is refused, the collect finds nothing lit
+        start = len(self.log)
+        self.hit_and_release_switch("s_eb_target")
+        self.advance_time_and_run(.5)
+        self.assertEqual(["extra_ball_award_disabled", "extra_ball_target_eb_award_disabled",
+                          "extra_ball_group_main_award_disabled"], self.eb_names(start))
+        start = len(self.log)
+        self.hit_and_release_switch("s_eb_collect")
+        self.advance_time_and_run(.5)
+        self.assertEqual(["extra_ball_group_main_award_disabled"], self.eb_names(start))
+        self.assertEqual(1, player.extra_balls)
+        # the unformatted player variable from the note
+        self.assertEqual(0, player["extra_ball_group_{}_num_lit"])
+        # drain ball 1 (save is still running from ball start, so wait it out): the same ball is played again
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(13)
+        start = len(self.log)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        started = [a for t, n, a in self.log[start:] if n == "ball_started"]
+        self.assertEqual([{"ball": 1, "is_extra_ball": True}], started)
+        self.assertEqual(0, player.extra_balls)
+
+
+class TestBallSaveTimerOnPlayfieldActive(BallSaveMachine):
+    """build/ball-saves-and-extra-balls.md warning: with playfield_active, a first switch after the eject timeout
+    never starts the timer, so the save lasts for the whole ball."""
+
+    @classmethod
+    def setUpClass(cls):
+        files = {k: v for k, v in page_files(BS_PAGE).items() if k.startswith("modes/")}
+        key = "modes/base/config/base.yaml"
+        files[key] = files[key].replace("timer_start_events: balldevice_bd_trough_ball_eject_success",
+                                        "timer_start_events: playfield_active")
+        cls.machine_dir = make_machine(full_config(BS_PAGE), files=files)
+
+    def test_never_times_out(self):
+        self.assertIn("timer_start_events: balldevice_bd_trough_ball_eject_success",
+                      page_files(BS_PAGE)["modes/base/config/base.yaml"])
+        self.advance_time_and_run(1)
+        self.t0 = self.machine.clock.get_time()
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(5)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(12)
+        self.assertNotIn("ball_save_start_save_timer_start", self.names())
+        self.drain_all_balls()
+        self.advance_time_and_run(2)
+        self.assertIn("ball_save_start_save_saving_ball", self.names())
+        self.assertBallNumber(1)
+
+
+class TestBallSaveTimerOnEjectSuccessLate(BallSaveMachine):
+    """The page's event starts the timer even when the eject timeout confirms the ball (3.1 s, off at 15.1 s)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = bs_machine()
+
+    def test_starts_on_timeout(self):
+        self.advance_time_and_run(1)
+        self.t0 = self.machine.clock.get_time()
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(5)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(12)
+        times = {n: t for t, n, a in self.log}
+        self.assertAlmostEqual(3.1, times["ball_save_start_save_timer_start"], delta=.11)
+        self.assertAlmostEqual(15.1, times["ball_save_start_save_disabled"], delta=.11)
+
+
+class TestExtraBallWithoutGroupLimit(BallSaveMachine):
+    """build/ball-saves-and-extra-balls.md warning: without a group limit, the extra ball's own max_per_game
+    (default 1) does not stop light-and-collect."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = bs_machine(without_group_limit=True)
+
+    def test_unlimited(self):
+        self.assertIn(GROUP_LIMIT, full_config(BS_PAGE))
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        for _ in range(3):
+            self.eb_round()
+        self.assertEqual(3, self.machine.game.player.extra_balls)
+        self.assertNotIn("extra_ball_award_disabled", self.names())
+        # lit but not collected: lit again when the next ball starts
+        self.hit_and_release_switch("s_eb_target")
+        self.advance_time_and_run(15)
+        start = len(self.log)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertIn("ball_started", [n for t, n, a in self.log[start:]])
+        self.assertIn("extra_ball_group_main_lit", self.eb_names(start))
+
+
 class TestEventCorrectionsStillHold(unittest.TestCase):
     """gen_reference.EVENT_CORRECTIONS: each annotated name still differs from what the code posts."""
 
