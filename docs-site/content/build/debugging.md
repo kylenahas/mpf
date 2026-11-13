@@ -1,6 +1,6 @@
 ---
 title: "Debugging"
-weight: 9
+weight: 20
 summary: "Where MPF reports problems, how to read a config error, the exact messages for common mistakes, and why a game will not start."
 verified: "MPF 0.82.0.dev0, smart virtual platform and mpf game -X"
 ---

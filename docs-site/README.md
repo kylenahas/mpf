@@ -59,7 +59,8 @@ Done:
   |block, four shot hit events, custom profile, shot group hit/complete/rotate/reset, per-player shot state); shows
   (verified: duration/time steps, fade, show file with token, loops, events_when_completed, shot lights via
   show_tokens); debugging (verified: 15 config mistakes with the exact message each prints, errors that only appear
-  at first use, empty-trough start refusal from a real `mpf game -X` run).
+  at first use, empty-trough start refusal from a real `mpf game -X` run); multiball (verified: two-ball VUK lock,
+  lock-full starts a 3-ball multiball from the lock and trough, shoot_again, ball_lost/ended, lock reset per player).
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
   boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
@@ -104,12 +105,17 @@ Findings from running MPF (already reflected in the pages):
 - Errors that pass startup and fail at first use: missing `default_source_device` (game start), lower-case
   `true` in a condition, a mode player on its own start event, single-wound flipper without hold power.
 - `mpf game -t` turns the text UI off despite its help text. Error messages link to missionpinball.org/latest/logs.
+- MPF bug: `multiball_(name)_lost_ball` is documented in the source but `multiball_(name)_ball_lost` is posted.
+  `gen_reference.py` `EVENT_CORRECTIONS` adds a warning to the events page and the multiballs page;
+  `TestEventCorrectionsStillHold` fails once MPF is fixed, so the correction can be removed.
+- A multiball lock's count is per player and survives the multiball; without `reset_count_for_current_player_events`
+  the lock stays full for the rest of the game.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
 
 Next:
-1. Task guides done for the first pass. Candidates for more: multiball and ball locks, ball saves and extra balls,
+1. Task guides done for the first pass. Candidates for more: ball saves and extra balls,
    high scores and credits (built-in modes), segment displays and sound/media (needs mpf-gmc).
 2. For developers section (how-events-work done): boot sequence (verify plugin loading after init_phase_2 and custom code after
    init_phase_3 in `machine.py::_run_init_phases`), config pipeline, event system, devices, platforms, BCP.

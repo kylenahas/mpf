@@ -523,8 +523,10 @@ def build_config_pages(events):
             evs = [e for e in evs if not (e["name"] in seen or seen.add(e["name"]))]
             if evs:
                 body.append("## Events posted\n\n`(name)` is the device name.\n\n" + "\n".join(
-                    "- [{}](/reference/events/#{}): {}".format(code(e["name"]), event_anchor(e["name"]),
-                                                               esc(e["desc"].split("\n")[0])) for e in evs) + "\n")
+                    "- [{}](/reference/events/#{}): {}{}".format(
+                        code(e["name"]), event_anchor(e["name"]), esc(e["desc"].split("\n")[0]),
+                        " **Wrong name in the source; see the note on the events page.**"
+                        if e["name"] in EVENT_CORRECTIONS else "") for e in evs) + "\n")
 
         if used_in:
             body.append("## Used in tested configs\n\n" + "\n".join("- " + code(rel(p)) for p in used_in[:15]) +
@@ -552,6 +554,14 @@ def event_anchor(name):
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
+# Annotations that do not match what the code posts. Each was confirmed by running MPF; the note is shown under the
+# event. Keyed by annotated name. Remove an entry when MPF is fixed (verify/test_guides.py checks they still hold).
+EVENT_CORRECTIONS = {
+    "multiball_(name)_lost_ball": "MPF 0.82.0.dev0 actually posts this event as `multiball_(name)_ball_lost` "
+                                  "(`Multiball._ball_drain_count_balls`). Use that name in your config.",
+}
+
+
 def build_events(events):
     out = [front("Events", 3),
            "Every event documented in the MPF source with an `'''event: ...'''` annotation ({} events). "
@@ -568,6 +578,9 @@ def build_events(events):
             out.append('### {} {{#{}}}\n'.format(code(e["name"]), event_anchor(e["name"])))
             if e["desc"]:
                 out.append(e["desc"] + "\n")
+            if e["name"] in EVENT_CORRECTIONS:
+                out.append("{{< warn >}}\n**Wrong name in the source.** " + EVENT_CORRECTIONS[e["name"]] +
+                           "\n{{< /warn >}}\n")
             if e["args"]:
                 out.append("| Argument | Meaning |\n|---|---|\n" + "\n".join(
                     "| {} | {} |".format(code(a), esc(d)) for a, d in e["args"]) + "\n")

@@ -1018,6 +1018,141 @@ class TestModeOwnStartEvent(GuideMachine):
             self.advance_time_and_run(1)
 
 
+MB_PAGE = "build/multiball.md"
+MB_RESET = "    reset_count_for_current_player_events: multiball_main_mb_started\n"
+
+
+def mb_machine(without_reset=False):
+    files = {k: v for k, v in page_files(MB_PAGE).items() if k.startswith("modes/")}
+    if without_reset:
+        files["modes/base/config/base.yaml"] = files["modes/base/config/base.yaml"].replace(MB_RESET, "")
+    return make_machine(full_config(MB_PAGE), files=files)
+
+
+class MultiballMachine(GuideMachine):
+    def counts(self):
+        g = self.machine.game
+        return (self.machine.ball_devices["bd_trough"].balls, self.machine.ball_devices["bd_lock"].balls,
+                self.machine.playfield.balls, g.balls_in_play, self.machine.multiball_locks["vuk_lock"].locked_balls)
+
+    def lock_ball(self):
+        self.machine.default_platform.add_ball_to_device(self.machine.ball_devices["bd_lock"])
+        self.advance_time_and_run(5)
+
+    def play_to_ball_2(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.lock_ball()
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.lock_ball()
+        self.advance_time_and_run(12)
+        for _ in range(3):
+            self.drain_one_ball()
+            self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+
+
+class TestMultiball(MultiballMachine):
+    """build/multiball.md: machine config and base mode, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = mb_machine()
+
+    def test_page_walkthrough(self):
+        self.assertIn(MB_RESET, page_files(MB_PAGE)["modes/base/config/base.yaml"])
+        for event in ("multiball_lock_vuk_lock_locked_ball", "multiball_lock_vuk_lock_full",
+                      "multiball_main_mb_started", "multiball_main_mb_shoot_again", "multiball_main_mb_shoot_again_ended",
+                      "multiball_main_mb_ball_lost", "multiball_main_mb_lost_ball", "multiball_main_mb_ended"):
+            self.mock_event(event)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        player = self.machine.game.player
+        self.assertEqual((2, 0, 1, 1, 0), self.counts())
+        self.assertEqual(0, player.score)
+        self.lock_ball()
+        self.assertEqual((1, 1, 1, 1, 1), self.counts())
+        self.assertEventCalledWith("multiball_lock_vuk_lock_locked_ball", total_balls_locked=1)
+        self.assertEqual(1000, player.score)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.assertEqual(1000, player.score)
+        self.lock_ball()
+        self.assertEventCalled("multiball_lock_vuk_lock_full")
+        self.assertEventCalledWith("multiball_main_mb_started", balls=3)
+        self.assertEqual(0, self.machine.ball_devices["bd_lock"].balls)
+        self.assertEqual(3, self.machine.game.balls_in_play)
+        self.assertEqual(0, self.machine.multiball_locks["vuk_lock"].locked_balls)
+        self.assertEqual(2000, player.score)
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.assertEqual(2100, player.score)
+        # drain inside shoot_again is replaced
+        self.drain_one_ball()
+        self.advance_time_and_run(4)
+        self.assertEventCalled("multiball_main_mb_shoot_again")
+        self.assertEqual((0, 0, 3, 3), self.counts()[:4])
+        self.advance_time_and_run(8)
+        self.assertEventCalled("multiball_main_mb_shoot_again_ended")
+        # drains after the window
+        self.drain_one_ball()
+        self.advance_time_and_run(2)
+        self.assertEqual((1, 0, 2, 2), self.counts()[:4])
+        self.assertEventCalled("multiball_main_mb_ball_lost")
+        self.assertEventNotCalled("multiball_main_mb_lost_ball")
+        self.assertEventNotCalled("multiball_main_mb_ended")
+        self.drain_one_ball()
+        self.advance_time_and_run(2)
+        self.assertEqual((2, 0, 1, 1), self.counts()[:4])
+        self.assertEventCalled("multiball_main_mb_ended")
+        self.drain_one_ball()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        # the lock works again on ball 2
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(1)
+        self.lock_ball()
+        self.assertEqual((1, 1, 1, 1, 1), self.counts())
+        self.assertEqual(3100, player.score)
+
+
+class TestMultiballWithoutReset(MultiballMachine):
+    """build/multiball.md warning: without the reset, the lock stays full and ball 2's lock does nothing."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = mb_machine(without_reset=True)
+
+    def test_lock_stays_full(self):
+        self.mock_event("multiball_lock_vuk_lock_locked_ball")
+        self.play_to_ball_2()
+        self.assertEqual(2, self.machine.multiball_locks["vuk_lock"].locked_balls)
+        before = self._events["multiball_lock_vuk_lock_locked_ball"]
+        score = self.machine.game.player.score
+        self.lock_ball()
+        self.assertEqual(before, self._events["multiball_lock_vuk_lock_locked_ball"])
+        self.assertEqual(0, self.machine.ball_devices["bd_lock"].balls)
+        self.assertEqual(score, self.machine.game.player.score)
+
+
+class TestEventCorrectionsStillHold(unittest.TestCase):
+    """gen_reference.EVENT_CORRECTIONS: each annotated name still differs from what the code posts."""
+
+    def test_multiball_lost_ball(self):
+        source = (Path(__file__).resolve().parents[2] / "mpf" / "devices" / "multiball.py").read_text(encoding="utf-8")
+        self.assertIn('"multiball_{}_ball_lost".format(self.name)', source)
+        self.assertIn("event: multiball_(name)_lost_ball", source)
+
+
 DEBUG_PAGE = "build/debugging.md"
 FIRST = "get-started/first-machine.md"
 
