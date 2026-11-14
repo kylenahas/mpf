@@ -421,6 +421,13 @@ class TestModes(GuideMachine):
         self.advance_time_and_run(3)
         self.assertBallNumber(3)
         self.assertEqual({"game": 20, "base": 100, "skillshot": 200}, self.running())
+        # any other playfield_active switch ends the skill shot too
+        self.hit_and_release_switch("s_target")
+        self.advance_time_and_run(.1)
+        self.assertNotIn("skillshot", self.running())
+        self.hit_and_release_switch("s_upper_lane")
+        self.advance_time_and_run(.1)
+        self.assertEventCalled("skillshot_made", times=1)
 
 
 class TestModeErrors(unittest.TestCase):
@@ -752,7 +759,8 @@ class TestShows(ShowsMachine):
         cls.machine_dir = shows_machine()
 
     def test_page_walkthrough(self):
-        self.assertEqual({"modes/base/config/base.yaml", "shows/flash_light.yaml"},
+        self.assertEqual({"modes/base/config/base.yaml", "shows/flash_light.yaml", "shows/blink.yaml",
+                          "shows/lane_number.yaml"},
                          {k for k in page_files(SHOWS_PAGE) if not k.startswith("config/")})
         self.mock_event("target_flash_done")
         self.mock_event("start_pulse_done")
@@ -794,6 +802,94 @@ class TestShows(ShowsMachine):
         self.advance_time_and_run(3)
         self.assertBallNumber(2)
         self.assertEqual("ffffff", self.color("l_lane1"))
+
+
+def shows_snippet(first_line, contains):
+    blocks = [b for b in yaml_blocks(SHOWS_PAGE) if b.startswith(first_line) and contains in b]
+    assert len(blocks) == 1, (first_line, contains)
+    return blocks[0]
+
+
+class TestShowTokensAndTags(ShowsMachine):
+    """build/shows.md "How tokens work" and "Tags": blink, lane_number, lanes_orange and the flash_lanes player."""
+
+    @classmethod
+    def setUpClass(cls):
+        play = shows_snippet("show_player:", "flash_lanes")
+        config = merge_config(full_config(SHOWS_PAGE), shows_snippet("shows:", "lanes_orange"))
+        cls.machine_dir = make_machine(config, files={
+            **{k: v for k, v in page_files(SHOWS_PAGE).items() if k.startswith(("modes/", "shows/"))},
+            "modes/base/config/base.yaml": page_files(SHOWS_PAGE)["modes/base/config/base.yaml"].replace(
+                "show_player:\n", play, 1)})
+
+    def lanes(self):
+        return self.color("l_lane1"), self.color("l_lane2"), self.color("l_target")
+
+    def test_tokens_and_tags(self):
+        shows = self.machine.shows
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(5)
+        # tag as a token value: both lanes flash red three times
+        self.post_event("flash_lanes")
+        samples = []
+        for _ in range(14):
+            self.advance_time_and_run(.125)
+            samples.append(self.lanes())
+        red, off = ("ff0000", "ff0000", "000000"), ("000000", "000000", "000000")
+        self.assertEqual([red, off, off, red, red, off, off, red, red, off, off, off, off, off], samples)
+        # token as part of a name
+        shows["lane_number"].play(show_tokens={"num": "2"}, priority=1000)
+        self.advance_time_and_run(.1)
+        self.assertEqual(("000000", "008000", "000000"), self.lanes())
+        # tag directly in a step
+        shows["lanes_orange"].play(priority=2000)
+        self.advance_time_and_run(.1)
+        self.assertEqual(("ffa500", "ffa500", "000000"), self.lanes())
+        # token mismatches
+        with self.assertRaisesRegex(ValueError, 'Token mismatch while playing show "blink"'):
+            shows["blink"].play(show_tokens={"light": "l_target", "colour": "red"})
+        shows["blink"].play(show_tokens={"color": "blue"}, priority=3000)
+        self.advance_time_and_run(.1)
+        self.assertEqual(("ffa500", "ffa500", "000000"), self.lanes())
+        with self.assertRaisesRegex(Exception, r"Invalid color \(color\).*CFE-light_player-1"):
+            shows["blink"].play(show_tokens={"light": "l_target"}, priority=3000)
+            self.advance_time_and_run(.1)
+
+    def test_unknown_light_or_tag(self):
+        self.advance_time_and_run(1)
+        with self.assertRaisesRegex(Exception, "Could not find a lights device with name or tag l_nope.*CFE-light_player-101"):
+            self.machine.shows["blink"].play(show_tokens={"light": "l_nope", "color": "red"})
+            self.advance_time_and_run(.1)
+
+    def test_builtin_color_shows(self):
+        self.advance_time_and_run(1)
+        self.machine.shows["led_color"].play(show_tokens={"light": "lane_lights", "color": "purple"})
+        self.advance_time_and_run(.1)
+        self.assertEqual("800080", self.color("l_lane2"))
+        self.machine.shows["flash_color"].play(show_tokens={"light": "l_target", "color": "red"})
+        self.advance_time_and_run(.5)
+        self.assertEqual("ff0000", self.color("l_target"))
+        self.advance_time_and_run(1)
+        self.assertEqual("000000", self.color("l_target"))
+        self.advance_time_and_run(1)
+        self.assertEqual("ff0000", self.color("l_target"))
+
+
+class TestShowNameTaken(unittest.TestCase):
+    """build/shows.md: a show file named flash_color clashes with MPF's built-in show."""
+
+    def test_duplicate(self):
+        files = {k: v for k, v in page_files(SHOWS_PAGE).items() if k.startswith(("modes/", "shows/"))}
+        files["shows/flash_color.yaml"] = files.pop("shows/blink.yaml")
+        machine_dir = make_machine(full_config(SHOWS_PAGE), files=files)
+
+        class Machine(ShowsMachine):
+            def runTest(self):
+                pass
+        Machine.machine_dir = machine_dir
+        with self.assertRaisesRegex(AssertionError, "Duplicate show flash_color"):
+            Machine("runTest").setUp()
 
 
 class TestShowWithoutLoops(ShowsMachine):
@@ -1347,6 +1443,286 @@ class TestExtraBallWithoutGroupLimit(BallSaveMachine):
         self.advance_time_and_run(4)
         self.assertIn("ball_started", [n for t, n, a in self.log[start:]])
         self.assertIn("extra_ball_group_main_lit", self.eb_names(start))
+
+
+def example_machine(page, config_change=None, file_changes=None):
+    """A machine from an examples page: its labelled machine config and every labelled mode file."""
+    files = {k: v for k, v in page_files(page).items() if k.startswith("modes/")}
+    for key, change in (file_changes or {}).items():
+        files[key] = change(files[key])
+    config = full_config(page)
+    if config_change:
+        config = config_change(config)
+    return make_machine(config, files=files)
+
+
+class ExampleMachine(GuideMachine):
+    def hit(self, switch, times=1):
+        for _ in range(times):
+            self.hit_and_release_switch(switch)
+            self.advance_time_and_run(.1)
+
+    def running(self):
+        return sorted(m.name for m in self.machine.mode_controller.active_modes if m.name not in ("game", "base"))
+
+
+BONUS_PAGE = "examples/end-of-ball-bonus.md"
+
+
+class TestExampleBonus(ExampleMachine):
+    """examples/end-of-ball-bonus.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(BONUS_PAGE)
+
+    def test_walkthrough(self):
+        log = []
+        t0 = [0.0]
+        for name in ("bonus_start", "bonus_entry", "ball_started"):
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: log.append(
+                    (round(self.machine.clock.get_time() - t0[0], 2), name, kwargs.get("entry"), kwargs.get("score"),
+                     kwargs.get("bonus_score"))), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        player = self.machine.game.player
+        self.hit("s_ramp", 3)
+        self.hit("s_target", 2)
+        lanes = self.machine.shot_groups["bonus_lanes"].config["shots"]
+        self.hit("s_lane_left")
+        self.assertEqual(["lit", "unlit", "unlit"], [s.state_name for s in lanes])
+        self.hit("s_lane_left")   # already lit: stays lit
+        self.assertEqual(["lit", "unlit", "unlit"], [s.state_name for s in lanes])
+        self.assertEqual(1, player.bonus_multiplier)
+        self.hit("s_left_flipper")  # lane change: the lit lane wraps to the right
+        self.assertEqual(["unlit", "unlit", "lit"], [s.state_name for s in lanes])
+        self.hit("s_lane_left")
+        self.hit("s_lane_center")
+        self.assertEqual(["unlit", "unlit", "unlit"], [s.state_name for s in lanes])  # reset on complete
+        self.assertEqual(2, player.bonus_multiplier)
+        self.assertEqual(7100, player.score)  # 1500 + 200 + 4 lane hits + 5000
+        t0[0] = self.machine.clock.get_time()
+        del log[:]
+        self.drain_all_balls()
+        self.advance_time_and_run(10)
+        self.assertEqual([
+            (0.5, "bonus_start", None, None, None),
+            (1.5, "bonus_entry", "ball_bonus", 1000, 1000),
+            (2.5, "bonus_entry", "ramps", 3000, 4000),
+            (3.5, "bonus_entry", "targets", 500, 4500),
+            (4.5, "bonus_entry", "subtotal", 4500, None),
+            (5.5, "bonus_entry", "multiplier", 2, None),
+            (6.5, "bonus_entry", "total", 9000, None),
+            (7.5, "ball_started", None, None, None)], log)
+        self.assertEqual(16100, player.score)
+        self.assertEqual((0, 0, 1), (player.ramps, player.targets, player.bonus_multiplier))
+        # ball 2: multiplier capped at 5, flipper_cancel hurries the count
+        self.hit("s_ramp")
+        for _ in range(6):
+            for lane in ("s_lane_left", "s_lane_center", "s_lane_right"):
+                self.hit(lane)
+        self.assertEqual(5, player.bonus_multiplier)
+        self.assertEqual(16100 + 500 + 1800 + 30000, player.score)
+        t0[0] = self.machine.clock.get_time()
+        del log[:]
+        self.drain_all_balls()
+        self.advance_time_and_run(1.2)
+        self.hit_switch_and_run("s_left_flipper", .05)
+        del log[:]
+        self.hit_switch_and_run("s_right_flipper", 0)  # flipper_cancel: time the hurried lines from here
+        t0[0] = self.machine.clock.get_time()
+        self.advance_time_and_run(2)
+        self.assertEqual([
+            (0.0, "bonus_entry", "ball_bonus", 1000), (0.1, "bonus_entry", "ramps", 1000),
+            (0.2, "bonus_entry", "subtotal", 2000), (0.3, "bonus_entry", "multiplier", 5),
+            (0.4, "bonus_entry", "total", 10000), (0.5, "ball_started", None, None)],
+            [(t, n, e, s) for t, n, e, s, b in log])
+
+        self.assertEqual(58400, player.score)
+
+
+class TestExampleBonusWithoutInitialMultiplier(ExampleMachine):
+    """The page: without player_vars, the first completed set of lanes only brings the multiplier to 1."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(BONUS_PAGE, config_change=lambda c: c.replace(
+            "player_vars:\n  bonus_multiplier:\n    initial_value: 1\n\n", ""))
+
+    def test_first_lane_gives_1x(self):
+        self.assertNotIn("player_vars", full_config(BONUS_PAGE).replace(
+            "player_vars:\n  bonus_multiplier:\n    initial_value: 1\n\n", ""))
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        for expected in (1, 2):
+            for lane in ("s_lane_left", "s_lane_center", "s_lane_right"):
+                self.hit(lane)
+            self.assertEqual(expected, self.machine.game.player.bonus_multiplier)
+
+
+JACKPOTS_PAGE = "examples/multiball-jackpots.md"
+
+
+class JackpotsMachine(ExampleMachine):
+    def state(self):
+        shots = self.machine.shots
+        player = self.machine.game.player
+        jackpot = player.jackpot_value if player.is_player_var("jackpot_value") else None
+        return (player.score, jackpot,
+                shots["left_jackpot"].state_name, shots["right_jackpot"].state_name,
+                shots["super_jackpot"].enabled, self.machine.game.balls_in_play)
+
+    def begin(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+
+
+class TestExampleJackpots(JackpotsMachine):
+    """examples/multiball-jackpots.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(JACKPOTS_PAGE)
+
+    def test_walkthrough(self):
+        self.mock_event("jackpots_lit_complete")
+        self.begin()
+        self.hit("s_left_ramp")
+        self.assertEqual(0, self.machine.game.player.score)
+        self.assertNotIn("jackpots", self.running())
+        self.hit("s_target", 3)
+        self.advance_time_and_run(4)
+        self.assertEqual((300, 10000, "lit", "lit", False, 2), self.state())
+        self.assertEventCalled("jackpots_lit_complete")  # "also posted at the start of every round"
+        self.hit("s_left_ramp")
+        self.assertEqual((10300, 10000, "collected", "lit", False, 2), self.state())
+        self.hit("s_left_ramp")
+        self.hit("s_scoop")
+        self.assertEqual((10300, 10000, "collected", "lit", False, 2), self.state())
+        self.hit("s_target", 2)
+        self.assertEqual((10500, 12000, "collected", "lit", False, 2), self.state())
+        self.hit("s_right_ramp")
+        self.assertEqual((22500, 12000, "collected", "collected", True, 2), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((82500, 12000, "lit", "lit", False, 2), self.state())
+        self.hit("s_scoop")
+        self.assertEqual(82500, self.machine.game.player.score)
+        self.hit("s_right_ramp")
+        self.assertEqual((94500, 12000, "lit", "collected", False, 2), self.state())
+        self.advance_time_and_run(6)
+        self.drain_one_ball()
+        self.advance_time_and_run(2)
+        self.assertEqual(1, self.machine.game.balls_in_play)
+        self.assertNotIn("jackpots", self.running())
+        self.hit("s_left_ramp")
+        self.assertEqual(94500, self.machine.game.player.score)
+        self.hit("s_target", 2)
+        self.assertEqual(1, self.machine.game.balls_in_play)
+        self.hit("s_target")
+        self.advance_time_and_run(4)
+        self.assertEqual((94800, 10000, "lit", "lit", False, 2), self.state())
+        self.hit("s_right_ramp")
+        self.assertEqual((104800, 10000, "lit", "collected", False, 2), self.state())
+
+
+class TestExampleJackpotsCounterNotDisabled(JackpotsMachine):
+    """The note: with disable_on_complete: false, targets during the multiball count toward the next one."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(JACKPOTS_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace(
+                "    start_enabled: true\n    enable_events: multiball_main_mb_ended\n",
+                "    disable_on_complete: false\n")})
+
+    def test_next_multiball_after_one_target(self):
+        self.begin()
+        self.hit("s_target", 3)
+        self.advance_time_and_run(4)
+        self.hit("s_target", 2)
+        self.advance_time_and_run(6)
+        self.drain_one_ball()
+        self.advance_time_and_run(2)
+        self.assertEqual(1, self.machine.game.balls_in_play)
+        self.hit("s_target")
+        self.advance_time_and_run(4)
+        self.assertEqual(2, self.machine.game.balls_in_play)
+
+
+MISSIONS_PAGE = "examples/mission-ladder.md"
+
+
+class MissionsMachine(ExampleMachine):
+    def state(self):
+        a = self.machine.achievements
+
+        def show(name):
+            return a[name].state + ("*" if a[name].selected else "")
+        return self.machine.game.player.score, show("ramps"), show("targets"), self.running()
+
+
+class TestExampleMissions(MissionsMachine):
+    """examples/mission-ladder.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(MISSIONS_PAGE)
+
+    def test_walkthrough(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.assertEqual((0, "enabled*", "enabled", []), self.state())
+        self.hit("s_left_sling")
+        self.assertEqual((0, "enabled", "enabled*", []), self.state())
+        self.hit("s_left_sling")
+        self.assertEqual((0, "enabled*", "enabled", []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((0, "started", "enabled", ["mission_ramps"]), self.state())
+        self.hit("s_left_sling")
+        self.hit("s_scoop")
+        self.assertEqual((0, "started", "enabled", ["mission_ramps"]), self.state())
+        self.advance_time_and_run(21)
+        self.assertEqual((0, "stopped*", "enabled", []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((0, "started", "enabled", ["mission_ramps"]), self.state())
+        self.hit("s_ramp", 3)
+        self.assertEqual((65000, "completed", "enabled*", []), self.state())
+        self.advance_time_and_run(10)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual((65000, "completed", "enabled*", []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((65000, "completed", "started", ["mission_targets"]), self.state())
+        self.hit("s_target", 2)
+        self.assertEqual((125000, "completed", "completed", ["wizard"]), self.state())
+        self.hit("s_ramp")
+        self.assertEqual(225000, self.machine.game.player.score)
+        self.hit("s_scoop")
+        self.assertEqual((1225000, "enabled*", "enabled", []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((1225000, "started", "enabled", ["mission_ramps"]), self.state())
+
+    def test_drain_during_mission(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(1)
+        self.hit("s_scoop")
+        self.hit("s_ramp")
+        self.assertEqual(1, self.machine.counters["mission_ramp_count"].value)
+        self.advance_time_and_run(8)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual((5000, "stopped*", "enabled", []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual(["mission_ramps"], self.running())
+        self.assertEqual(0, self.machine.counters["mission_ramp_count"].value)
 
 
 class TestEventCorrectionsStillHold(unittest.TestCase):

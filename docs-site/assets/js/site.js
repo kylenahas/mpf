@@ -22,8 +22,16 @@
       navBtn.setAttribute("aria-expanded", String(open));
     });
   }
-  var current = document.querySelector(".sidebar a.current");
-  if (current && current.scrollIntoView) current.scrollIntoView({ block: "center" });
+  // Bring the current page's link into view inside the sidebar only. scrollIntoView would also scroll the window,
+  // so pages listed low in the sidebar would open part way down.
+  var sidebar = document.querySelector(".sidebar");
+  var current = sidebar && sidebar.querySelector("a.current");
+  if (current) {
+    var top = current.getBoundingClientRect().top - sidebar.getBoundingClientRect().top + sidebar.scrollTop;
+    if (top + current.offsetHeight > sidebar.scrollTop + sidebar.clientHeight || top < sidebar.scrollTop) {
+      sidebar.scrollTop = top - (sidebar.clientHeight - current.offsetHeight) / 2;
+    }
+  }
 
   // Copy buttons on code blocks.
   document.querySelectorAll(".doc .highlight").forEach(function (block) {

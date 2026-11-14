@@ -152,7 +152,7 @@ event_player:
 
 mode:
   start_events: ball_started
-  stop_events: skillshot_made, s_left_sling_active
+  stop_events: skillshot_made, sw_playfield_active
   priority: 200
   events_when_started: skillshot_lit
 
@@ -161,13 +161,21 @@ event_player:
 ```
 
 The skill shot starts with each ball. It ends either when it is made (the upper lane posts `skillshot_made`, which is
-also a stop event) or when the ball reaches the playfield and hits the slingshot first.
+also a stop event) or when the ball hits any other playfield switch first.
+
+"Any other switch" comes from tags. Every switch tagged `playfield_active` posts `sw_playfield_active` when it
+becomes active (a switch posts `sw_<tag>` for each of its tags), so the mode stops on the first slingshot, target or
+any other tagged switch, with no list of switch names to keep up to date. The upper lane is left **untagged** so it
+can't end the skill shot itself. Being untagged, it also doesn't confirm that the ball reached the playfield; the
+next tagged switch does that, or the trough's eject timeout.
 
 In the test run:
 
 - In attract mode, hitting `s_upper_lane` posted nothing: the mode's `event_player` did not exist yet.
 - When the ball started, `skillshot` was running and `skillshot_lit` was posted.
 - Hitting `s_upper_lane` posted `skillshot_made` and stopped the mode. A second hit posted nothing.
+- On later balls, hitting `s_left_sling` or `s_target` before the upper lane stopped the mode, and `skillshot_made` was
+  not posted.
 
 ### A mode that survives a drain: hurry-up
 

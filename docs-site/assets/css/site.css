@@ -32,7 +32,7 @@ code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .doc h3 code,.doc h2 code{font-size:.95em}
 .doc p,.doc li{max-width:75ch}
 .doc code{background:var(--code-bg);padding:.12em .36em;border-radius:5px}
-.doc{overflow-wrap:break-word}.doc :not(pre)>code{overflow-wrap:anywhere}
+.doc{overflow-wrap:break-word}.doc :not(pre)>code{overflow-wrap:anywhere}.doc td:first-child code{white-space:nowrap;overflow-wrap:normal}
 .doc pre{background:var(--code-bg);padding:14px 16px;border-radius:10px;overflow:auto;line-height:1.5}
 .doc pre code{background:none;padding:0}
 .doc blockquote{margin:1em 0;padding:.4em 1em;border-left:3px solid var(--gen);background:var(--gen-soft);border-radius:0 8px 8px 0;color:var(--muted)}

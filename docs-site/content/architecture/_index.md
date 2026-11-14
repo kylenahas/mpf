@@ -1,6 +1,6 @@
 ---
 title: "For developers"
-weight: 4
+weight: 5
 summary: "How MPF works inside: the event system first; more pages planned."
 ---
 

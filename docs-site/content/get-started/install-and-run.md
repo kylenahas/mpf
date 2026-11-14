@@ -21,15 +21,62 @@ needed for FAST.
 
 ## Install
 
-The package is named `mpf` and registers a console script called `mpf`:
+Install MPF into a Python **virtual environment** (venv): a folder holding its own copy of Python and its own
+packages. MPF and its dependencies then can't clash with other Python software on the computer, and you can keep a
+second venv for another MPF version instead of uninstalling one to try the other. Some Linux distributions (Debian 12,
+Ubuntu 23.04 and later) refuse `pip install` outside a venv altogether.
+
+### 1. Create the venv
+
+Do this once. The examples use a folder named `mpfenv` in your home folder; any name and place will do.
+
+macOS and Linux:
+
+```bash
+python3 -m venv ~/mpfenv
+```
+
+Windows (PowerShell):
+
+```powershell
+python -m venv $HOME\mpfenv
+```
+
+The venv uses whichever Python ran the command, so check that it is 3.10 to 3.14 first with `python3 --version`
+(`python --version` on Windows). To pick a specific installed version, name it: `python3.12 -m venv ~/mpfenv`.
+
+### 2. Activate it
+
+Activate the venv in every new terminal window before you run `pip` or `mpf`:
+
+| Shell | Command |
+|---|---|
+| macOS and Linux | `source ~/mpfenv/bin/activate` |
+| Windows PowerShell | `~\mpfenv\Scripts\Activate.ps1` |
+| Windows Command Prompt | `%USERPROFILE%\mpfenv\Scripts\activate.bat` |
+
+The prompt then starts with `(mpfenv)`, and `python`, `pip` and `mpf` all come from the venv. `deactivate` leaves it.
+On the test machine, after `deactivate`, the `mpf` command was no longer found at all.
+
+{{< note >}}
+If PowerShell says running scripts is disabled on this system, its execution policy is blocking `Activate.ps1`. Either
+use Command Prompt and `activate.bat`, or allow local scripts for your user once with
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+{{< /note >}}
+
+### 3. Install MPF
+
+With the venv active:
 
 ```bash
 pip install mpf
 ```
 
+The package is named `mpf` and registers a console script, also called `mpf`, inside the venv.
+
 {{< note >}}
 This page was written from the source tree, not from a package index. If you are working from a checkout of the
-repository, install it with `pip install -e .` from the repository root instead.
+repository, install it with `pip install -e .` from the repository root instead (with the venv active).
 {{< /note >}}
 
 Check the install:
@@ -38,9 +85,20 @@ Check the install:
 mpf --version
 ```
 
-This prints the MPF, config file and BCP versions (the `--version` option is defined in `mpf/commands/__init__.py`).
+On the test machine this printed one line:
+
+```text
+Mission Pinball Framework v0.82.0.dev0
+```
+
+{{< tip >}}
+**Trying another version?** Make a second venv (say `mpfenv-next`), activate it and install there. Your working
+`mpfenv` stays exactly as it was.
+{{< /tip >}}
 
 ## Create a project folder
+
+With the venv active:
 
 ```bash
 mpf init my_machine
@@ -60,7 +118,7 @@ name it initializes the current directory.
 
 ## Run it
 
-From inside the project folder:
+From inside the project folder, with the venv active:
 
 ```bash
 mpf game

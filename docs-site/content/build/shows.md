@@ -97,6 +97,97 @@ A show can live in the `shows:` section of a config (as above) or in its own fil
 `(light)` is a **token**: a placeholder filled in when the show is played, with `show_tokens`. One show can then flash
 any light.
 
+### How tokens work
+
+Any name in parentheses is a token, and you choose the names. A token can stand for a key (which light) or a value
+(which color), and a show can have as many as it needs:
+
+`shows/blink.yaml`:
+
+```yaml
+#show_version=6
+- duration: 250ms
+  lights:
+    (light): (color)
+- duration: 250ms
+  lights:
+    (light): off
+```
+
+Whoever plays the show supplies a value for each token under `show_tokens` (the [`show_player`](#playing-shows)
+example below passes `light` and `color`). MPF copies the show's steps and swaps every `(light)` and `(color)` for
+those values. The same show can run several times at once with different values, which is how every lane shot below
+lights its own lamp from one `on` show.
+
+A token can also be part of a longer name:
+
+`shows/lane_number.yaml`:
+
+```yaml
+#show_version=6
+- duration: -1
+  lights:
+    l_lane(num): green
+```
+
+Played with `num: 2`, this turned `l_lane2` green in the test run.
+
+What happens when the tokens don't match:
+
+| Mistake | Result in the test run |
+|---|---|
+| Passing a token the show doesn't use (a typo such as `colour`) | The show doesn't play: `Token mismatch while playing show "blink". Tokens expected: {'light', 'color'}. Tokens submitted: {'light', 'colour'}` (`Show.play`). |
+| Leaving out a token used as a **light name** | No error. That line of the step is skipped, so nothing lights (`LightPlayer.play` ignores light names still in parentheses). |
+| Leaving out a token used as a **color** | Error `Invalid color (color)`, code `CFE-light_player-1`. |
+
+### Tags: many lights at once
+
+`tags:` on a light is a list of labels you make up, comma-separated if there are several. The machine config on this
+page gives both lane lights the tag `lane_lights`:
+
+```yaml
+lights:
+  l_lane1:
+    number:
+    tags: lane_lights
+  l_lane2:
+    number:
+    tags: lane_lights
+```
+
+Wherever a show names a light, it can name a tag instead, and the step then sets every light with that tag. MPF looks
+for a light with that name first and only then for a tag (`LightPlayer._light_named_color`), so don't give a tag the
+same name as a light. A name that is neither is an error: `Could not find a lights device with name or tag l_nope`, code
+`CFE-light_player-101`.
+
+A tag directly in a step:
+
+```yaml
+shows:
+  lanes_orange:
+    - duration: -1
+      lights:
+        lane_lights: orange
+```
+
+In the test run this turned `l_lane1` and `l_lane2` orange and left `l_target` alone.
+
+A tag as a token value works the same way. This flashes both lane lights red with the `blink` show above:
+
+```yaml
+show_player:
+  flash_lanes:
+    blink:
+      loops: 2
+      show_tokens:
+        light: lane_lights
+        color: red
+```
+
+In the test run both lights flashed red together three times. Tags are the easy way to light a group (all the lane
+lights, every light in a bank) without listing each one. Switches carry tags too, for a different job: see
+[switch events](/build/switches-and-coils/#events-a-switch-posts).
+
 ## Playing shows
 
 `show_player:` plays and stops shows on events. The short form names a show; the long form adds settings:
@@ -136,8 +227,18 @@ again every 2 seconds for as long as the ball lasted. With `loops: 0` it played 
 
 A show played from a mode stops when the mode stops, and its lights go back to whatever is underneath.
 
-MPF's own `mpfconfig.yaml` defines three shows you can use with a `light` (or `lights`, `led`, `leds`) token:
-`on`, `off` (both hold until stopped) and `flash` (one second on, one second off).
+MPF's own `mpfconfig.yaml` defines shows you can use with a `light` token (a light name or a tag):
+
+| Show | Tokens | What it does |
+|---|---|---|
+| `on` | `light` | The light's `default_on_color`, held until stopped. |
+| `off` | `light` | Off, held until stopped. |
+| `flash` | `light` | One second on, one second off. |
+| `led_color` | `light`, `color` | The color, held until stopped. |
+| `flash_color` | `light`, `color` | One second in the color, one second off. |
+
+These names are taken, so don't name your own show `flash_color` (or any of the others): MPF stops at startup with
+`Duplicate show flash_color`.
 
 ## Lighting shots
 
@@ -228,7 +329,7 @@ show_player:
 virtual_platform_start_active_switches: s_trough1
 ```
 
-`shows/flash_light.yaml` is the show file above.
+The `shows/` folder holds the three show files above: `flash_light.yaml`, `blink.yaml` and `lane_number.yaml`.
 
 `modes/base/config/base.yaml`:
 
