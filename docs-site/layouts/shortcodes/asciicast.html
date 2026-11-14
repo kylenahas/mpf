@@ -1,0 +1,19 @@
+{{- /*
+  A terminal recording played with asciinema-player (vendored in assets/vendor/asciinema-player).
+  Usage: {{< asciicast src="casts/name.cast" poster="npt:5.9" caption="What it shows" >}}
+  poster: the moment shown before play starts ("npt:<seconds>"); default is the first frame.
+  baseof.html loads the player's files on pages that use this shortcode (.HasShortcode).
+*/ -}}
+{{- $src := .Get "src" | relURL -}}
+<figure class="cast">
+  <div class="cast-player" data-src="{{ $src }}" data-frame="{{ .Get "poster" | default "npt:0" }}"></div>
+  {{- with .Get "caption" }}<figcaption>{{ . | markdownify }}</figcaption>{{ end }}
+  <noscript><p>Terminal recording: <a href="{{ $src }}">{{ $src }}</a> (needs JavaScript to play).</p></noscript>
+</figure>
+<script>
+  (function (el) {
+    if (window.AsciinemaPlayer) {
+      AsciinemaPlayer.create(el.dataset.src, el, { poster: el.dataset.frame, fit: "width", idleTimeLimit: 1.5, preload: true });
+    }
+  })(document.currentScript.previousElementSibling.querySelector(".cast-player"));
+</script>

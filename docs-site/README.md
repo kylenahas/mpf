@@ -14,6 +14,8 @@ docs-site/
   assets/               css/site.css, js/site.js (search, theme toggle, copy buttons; minified + fingerprinted)
   tools/gen_reference.py  source -> reference pages
   tools/check_docs.py     YAML snippet + config key + internal link checks (static)
+  tools/casts/            record.sh + driver.py: re-record the terminal casts in static/casts/ (Linux/WSL, asciinema)
+  static/casts/           asciinema recordings (.cast), played by the vendored player in assets/vendor/asciinema-player/
   verify/test_guides.py   runs each guide's complete config on MPF (read from the page) and checks the described behavior
 ```
 
@@ -42,7 +44,9 @@ prefixes root-relative Markdown links (`[x](/build/modes/)`) with the base path.
 One-time repository setup: Settings > Pages > Source: GitHub Actions; allow `docs-site` in Settings > Environments >
 github-pages > deployment branches; on a fork, enable workflows in the Actions tab.
 
-Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matter `verified: "..."` and
+Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`, and
+`{{< asciicast src="casts/name.cast" poster="npt:5.9" caption="..." >}}` for a terminal recording (the player's files
+load only on pages that use it; `poster` is the frame shown before play). Front matter `verified: "..."` and
 `unverified: "..."` show a status pill under the title.
 
 ## Rules
@@ -51,6 +55,8 @@ Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matte
 - Config snippets come from `mpf/tests/machine_files/**` or are run on MPF before publishing. Mark anything not run
   with `unverified:` front matter or a `warn` callout.
 - `check_docs.py` must pass.
+- Terminal recordings are real sessions recorded with `tools/casts/record.sh` (only the typing is scripted), and the
+  page also shows the commands as text. Re-record them instead of editing a `.cast` by hand.
 - A page with `verified:` front matter has a test class in `verify/test_guides.py` that reads its config from the
   page. Change the page, rerun the tests. For multi-file machines, put a line holding only the file path
   (`` `modes/base/config/base.yaml`: ``) before each block; `page_files()` picks those up, and a block labelled

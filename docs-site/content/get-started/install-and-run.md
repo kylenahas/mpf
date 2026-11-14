@@ -26,6 +26,11 @@ packages. MPF and its dependencies then can't clash with other Python software o
 second venv for another MPF version instead of uninstalling one to try the other. Some Linux distributions (Debian 12,
 Ubuntu 23.04 and later) refuse `pip install` outside a venv altogether.
 
+Here is the whole install on Linux in one recording: steps 1 to 3 below, then
+[creating a project folder](#create-a-project-folder) and listing what it made:
+
+{{< asciicast src="casts/install.cast" poster="npt:20.5" caption="The full install on Ubuntu 22.04 with Python 3.10: create the venv, activate it, `pip install mpf`, check the version, then `mpf init my_machine` and `ls -R` of the new folder. `pip` installed MPF 0.81.0, the current release on PyPI at the time; these docs are written against the 0.82.0.dev0 source." >}}
+
 ### 1. Create the venv
 
 Do this once. The examples use a folder named `mpfenv` in your home folder; any name and place will do.
@@ -45,6 +50,16 @@ python -m venv $HOME\mpfenv
 The venv uses whichever Python ran the command, so check that it is 3.10 to 3.14 first with `python3 --version`
 (`python --version` on Windows). To pick a specific installed version, name it: `python3.12 -m venv ~/mpfenv`.
 
+{{< warn >}}
+**Ubuntu and Debian leave out the venv module.** On a stock Ubuntu 22.04, `python3 -m venv` stopped with `The virtual
+environment was not created successfully because ensurepip is not available` and asked for the `python3.10-venv`
+package. Install it once, then run `python3 -m venv ~/mpfenv` again:
+
+```bash
+sudo apt install python3-venv
+```
+{{< /warn >}}
+
 ### 2. Activate it
 
 Activate the venv in every new terminal window before you run `pip` or `mpf`:
@@ -57,6 +72,8 @@ Activate the venv in every new terminal window before you run `pip` or `mpf`:
 
 The prompt then starts with `(mpfenv)`, and `python`, `pip` and `mpf` all come from the venv. `deactivate` leaves it.
 On the test machine, after `deactivate`, the `mpf` command was no longer found at all.
+
+{{< asciicast src="casts/venv-activate.cast" poster="npt:6.5" caption="Activating and leaving the venv on Ubuntu 22.04. While it is active, `python` is the venv's own copy; after `deactivate` it is back to the system's `/usr/bin/python3`." >}}
 
 {{< note >}}
 If PowerShell says running scripts is disabled on this system, its execution policy is blocking `Activate.ps1`. Either

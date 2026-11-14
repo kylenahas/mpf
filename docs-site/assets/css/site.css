@@ -92,3 +92,4 @@ html{scroll-padding-top:calc(var(--top) + 16px + env(safe-area-inset-top,0px))}
 .highlight:hover .copy-btn,.copy-btn:focus{opacity:1}
 @media (max-width:1180px){.pg{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}.version{display:none}.content{padding:20px 16px 48px}}
+.cast{margin:1.2em 0}.cast .cast-player{border-radius:10px;overflow:hidden}.cast figcaption{font-size:13px;color:var(--muted);margin-top:6px}

@@ -9,6 +9,10 @@
     try { var t = localStorage.getItem("mpf-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
   {{ with resources.Get "css/site.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}">{{ end }}
+  {{- if .HasShortcode "asciicast" }}
+  {{ with resources.Get "vendor/asciinema-player/asciinema-player.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}">{{ end }}
+  {{ with resources.Get "vendor/asciinema-player/asciinema-player.min.js" | fingerprint }}<script src="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}"></script>{{ end }}
+  {{- end }}
 </head>
 <body>
   <header class="topbar">
