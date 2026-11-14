@@ -13,7 +13,7 @@
 <body>
   <header class="topbar">
     <button class="icon-btn" id="nav-toggle" aria-label="Open navigation">☰</button>
-    <a class="brand" href="{{ "/" | relURL }}">{{ site.Title }}</a>
+    <a class="brand" href="{{ site.Home.RelPermalink }}">{{ site.Title }}</a>
     <span class="version">v{{ site.Params.mpfVersion }}</span>
     <div class="search">
       <input id="search" type="search" placeholder="Search docs (press /)" autocomplete="off" aria-label="Search">

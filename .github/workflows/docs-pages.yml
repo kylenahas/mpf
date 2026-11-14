@@ -1,0 +1,83 @@
+name: Docs site (GitHub Pages)
+
+# Builds the Hugo site in docs-site/ and publishes it to GitHub Pages.
+# The config reference is generated from the MPF source on every build, so changes to mpf/ also rebuild the site.
+
+on:
+  push:
+    branches:
+      - docs-site
+    paths:
+      - "docs-site/**"
+      - "mpf/**"
+      - ".github/workflows/docs-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  HUGO_VERSION: "0.169.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install MPF (needed to generate the reference)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Generate the reference pages
+        run: python -I docs-site/tools/gen_reference.py . docs-site/content
+
+      - name: Check snippets and links
+        run: python -I docs-site/tools/check_docs.py . docs-site/content
+
+      - name: Install Hugo
+        run: |
+          wget -q -O "${{ runner.temp }}/hugo.deb" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          sudo dpkg -i "${{ runner.temp }}/hugo.deb"
+          hugo version
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build the site
+        run: >
+          hugo -s docs-site
+          --baseURL "${{ steps.pages.outputs.base_url }}/"
+          --destination "${{ github.workspace }}/public"
+          --panicOnWarning
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

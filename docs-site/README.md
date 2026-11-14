@@ -29,6 +29,19 @@ venv/Scripts/python -I -m unittest discover -s docs-site/verify
 hugo server -s docs-site
 ```
 
+## Publishing (GitHub Pages)
+
+`.github/workflows/docs-pages.yml` builds and deploys the site on every push to the `docs-site` branch that touches
+`docs-site/`, `mpf/` or the workflow (or by hand from the Actions tab). It installs MPF, generates the reference,
+runs `check_docs.py`, builds with Hugo 0.169.0 and publishes to `https://<owner>.github.io/<repo>/`.
+
+The site works from a subfolder: layouts use `relURL`/`RelPermalink`, and `layouts/_default/_markup/render-link.html`
+prefixes root-relative Markdown links (`[x](/build/modes/)`) with the base path. Check a subfolder build locally with
+`hugo server -s docs-site --baseURL http://localhost:1320/mpf/ --port 1320 --appendPort=false`.
+
+One-time repository setup: Settings > Pages > Source: GitHub Actions; allow `docs-site` in Settings > Environments >
+github-pages > deployment branches; on a fork, enable workflows in the Actions tab.
+
 Shortcodes for pages: `{{< note >}}`, `{{< warn >}}`, `{{< tip >}}`. Front matter `verified: "..."` and
 `unverified: "..."` show a status pill under the title.
 

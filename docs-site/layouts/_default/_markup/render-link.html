@@ -1,0 +1,9 @@
+{{- /* Markdown links like [x](/build/modes/) are written from the site root. Prefix them with the site's base path so
+       they still work when the site is served from a subfolder (GitHub Pages serves a project site at /<repo>/).
+       relURL keeps a leading slash relative to the host, so the slash is removed first. */ -}}
+{{- $dest := .Destination -}}
+{{- if and (hasPrefix $dest "/") (not (hasPrefix $dest "//")) -}}
+  {{- $dest = strings.TrimPrefix "/" $dest | relURL -}}
+{{- end -}}
+<a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>
+{{- /* no trailing newline */ -}}
