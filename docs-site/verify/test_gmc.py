@@ -71,7 +71,10 @@ def build_project(files):
     shutil.rmtree(godot_user_dir(path.name), ignore_errors=True)
     for rel, body in files.items():
         (path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (path / rel).write_text(body, encoding="utf-8")
+        if isinstance(body, bytes):
+            (path / rel).write_bytes(body)
+        else:
+            (path / rel).write_text(body, encoding="utf-8")
     # The page says to open the project in the editor first; that is what imports GMC's images and fonts.
     subprocess.run([GODOT, "--headless", "--path", str(path), "--import"], capture_output=True, timeout=300)
     return path
@@ -280,6 +283,19 @@ func _shot(_message = null) -> void:
 \tfor node in get_tree().root.find_children("*", "Control", true, false):
 \t\tif node is MPFWidget:
 \t\t\tprint("DOC_WIDGET %d %s on %s" % [count, node.key, node.get_parent().get_parent().name])
+\tfor node in get_tree().root.find_children("*", "Control", true, false):
+\t\tif node is MPFCarousel:
+\t\t\tvar shown := []
+\t\t\tfor c in node.get_children():
+\t\t\t\tif c.visible:
+\t\t\t\t\tshown.append(str(c.name))
+\t\t\tprint("DOC_CAROUSEL %d %s=%s" % [count, node.carousel_name, ",".join(shown)])
+\tfor bus_name in MPF.media.sound.buses:
+\t\tvar idx := AudioServer.get_bus_index(bus_name)
+\t\tprint("DOC_BUS %d %s %.2f" % [count, bus_name, db_to_linear(AudioServer.get_bus_volume_db(idx))])
+\t\tfor ch in MPF.media.sound.buses[bus_name].channels:
+\t\t\tif ch.playing and ch.stream:
+\t\t\t\tprint("DOC_SOUND %d %s %s" % [count, bus_name, ch.stream.resource_path.get_file().get_basename()])
 \tprint("DOC_DONE %d" % count)
 """
 
@@ -491,6 +507,292 @@ class TestWidgets(unittest.TestCase):
         widgets, events, text = self.run_game(self.files(change))
         self.assertIn("Unable to add widget 'jackpot' because target slide 'attract' is not on this display.", text)
         self.assertNotIn("jackpot_on_attract", " ".join(sum(widgets.values(), [])))
+
+
+SOUND_PAGE = "gmc/sound.md"
+
+SOUND_SCRIPT = """
+event_player:
+  s_doc_shot_active: doc_shot
+
+switch_player:
+  start_event: mode_attract_started
+  steps:
+    - {time: 1s, switch: s_start, action: hit}
+    - {time: 1500ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_ramp, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_target, action: hit}
+    - {time: 100ms, switch: s_doc_shot, action: hit}
+    - {time: 1000ms, switch: s_doc_shot, action: hit}
+    - {time: 2000ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_lock, action: hit}
+    - {time: 1000ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_ramp, action: hit}
+    - {time: 500ms, switch: s_doc_shot, action: hit}
+"""
+HURRY_STOP = "  mode_hurry_stopped:\n    tick:\n      action: stop\n"
+RAMP_EVENTS = ("      bus: voice\n      ducking:",
+               "      bus: voice\n      events_when_played: ramp_callout_started\n"
+               "      events_when_stopped: ramp_callout_done\n      ducking:")
+
+
+def tone(secs, freqs, rate=22050):
+    """A WAV file (bytes) of sine tones, stepping through `freqs` over `secs` seconds."""
+    import io, math, struct, wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        n = int(secs * rate)
+        frames = bytearray()
+        for i in range(n):
+            f = freqs[int(i / n * len(freqs))]
+            env = min(1.0, i / 200, (n - i) / 200)
+            frames += struct.pack("<h", int(32767 * 0.4 * env * math.sin(2 * math.pi * f * i / rate)))
+        w.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+def sound_list(text):
+    """{probe number: (sorted ['bus sound', ...], {bus: volume})} from DOC_SOUND / DOC_BUS lines."""
+    shots = {int(n): ([], {}) for n in re.findall(r"^DOC_DONE (\d+)", text, re.M)}
+    for n, bus, name in re.findall(r"^DOC_SOUND (\d+) (\S+) (\S+?)\r?$", text, re.M):
+        shots.setdefault(int(n), ([], {}))[0].append("%s %s" % (bus, name))
+    for n, bus, vol in re.findall(r"^DOC_BUS (\d+) (\S+) ([\d.]+)\r?$", text, re.M):
+        shots.setdefault(int(n), ([], {}))[1][bus] = float(vol)
+    return {n: (sorted(s), v) for n, (s, v) in shots.items()}
+
+
+@unittest.skipUnless(GODOT and GMC, "set MPF_DOCS_GODOT and MPF_DOCS_GMC to run the GMC checks")
+class TestSound(unittest.TestCase):
+    """gmc/sound.md: the page's machine, buses and gmc.cfg with generated tones; GMC reports what each bus plays."""
+
+    runs = {}
+
+    def files(self, change=None):
+        files = page_files(INSTALL_PAGE)
+        files["slides/base.tscn"] = page_files(SLIDES_PAGE)["slides/base.tscn"]
+        page = page_files(SOUND_PAGE)
+        self.assertEqual({"default_bus_layout.tres", "gmc.cfg", "config/config.yaml", "modes/base/config/base.yaml",
+                          "modes/hurry/config/hurry.yaml"}, set(page))
+        files.update(page)
+        files["gmc.cfg"] = with_godot_path(files["gmc.cfg"])
+        files.update({
+            "sounds/music.wav": tone(3.0, [220, 277, 330, 277]),
+            "sounds/callout_ramp.wav": tone(1.0, [660, 880]),
+            "sounds/callout_target.wav": tone(1.0, [880, 660]),
+            "sounds/jackpot.wav": tone(0.5, [990]),
+            "sounds/tick.wav": tone(0.5, [1200, 0]),
+        })
+        files = with_probe(files, SOUND_SCRIPT)
+        if change:
+            change(files)
+        return files
+
+    def run_variant(self, name, change=None):
+        """Run a variant once per test run; later tests reuse its results."""
+        if name not in self.runs:
+            run = BothRun(build_project(self.files(change)), platform="-X")
+            try:
+                self.assertTrue(run.wait_for("DOC_DONE 7", 60), run.text()[-3000:])
+                time.sleep(1.5)
+                text = run.text()
+                self.runs[name] = (sound_list(text), run.events(), text)
+            finally:
+                run.stop()
+        return self.runs[name]
+
+    @staticmethod
+    def base(files, old, new):
+        """Replace the first occurrence of `old` in the base mode config (the ramp callout comes first)."""
+        key = "modes/base/config/base.yaml"
+        assert old in files[key], old
+        files[key] = files[key].replace(old, new, 1)
+
+    def test_page_machine(self):
+        sounds, events, text = self.run_variant("page")
+        self.assertNotIn("SCRIPT ERROR", text)
+        self.assertEqual((["music music"], {"Master": 0.5, "music": 1.0, "sfx": 1.0, "voice": 1.0}), sounds[1])
+        self.assertEqual(["music music", "voice callout_ramp"], sounds[2][0])
+        self.assertAlmostEqual(0.5, sounds[2][1]["music"], delta=0.02)          # ducked
+        self.assertEqual(["music music", "sfx jackpot", "voice callout_ramp"], sounds[3][0])  # target queued
+        self.assertEqual(["music music", "voice callout_target"], sounds[4][0])  # queued callout played next
+        self.assertAlmostEqual(0.5, sounds[4][1]["music"], delta=0.02)
+        self.assertEqual((["music music"], 1.0), (sounds[5][0], sounds[5][1]["music"]))  # released
+        self.assertIn("sfx tick", sounds[6][0])
+        self.assertNotIn("sfx tick", sounds[7][0])                               # stopped from base
+
+    def without_stop(self, files):
+        self.base(files, HURRY_STOP, "")
+
+    def test_mode_sound_left_playing(self):
+        """Documented GMC bug: a mode with only sound_player leaves its sounds playing when it stops."""
+        sounds, events, text = self.run_variant("without_stop", self.without_stop)
+        self.assertIn("sfx tick", sounds[7][0])
+
+    @unittest.expectedFailure
+    def test_mode_sound_stopped_with_mode(self):
+        """What should happen (fails until GMC handles sounds_clear)."""
+        sounds, events, text = self.run_variant("without_stop", self.without_stop)
+        self.assertNotIn("sfx tick", sounds[7][0])
+
+    def stop_looping(self, files):
+        self.base(files, HURRY_STOP, HURRY_STOP.replace("action: stop", "action: stop_looping"))
+
+    def test_stop_looping_plays_again(self):
+        """Documented GMC bug: stop_looping starts a second copy."""
+        sounds, events, text = self.run_variant("stop_looping", self.stop_looping)
+        self.assertEqual(2, sounds[7][0].count("sfx tick"))
+
+    @unittest.expectedFailure
+    def test_stop_looping_does_not_add_a_copy(self):
+        """What should happen (fails until GMC accepts stop_looping)."""
+        sounds, events, text = self.run_variant("stop_looping", self.stop_looping)
+        self.assertLessEqual(sounds[7][0].count("sfx tick"), 1)
+
+    def test_events_alone(self):
+        def change(files):
+            self.base(files, *RAMP_EVENTS)
+            key = "modes/base/config/base.yaml"
+            start = files[key].index("    callout_target:")
+            files[key] = files[key][:start] + files[key][files[key].index("    jackpot: {}"):]
+        sounds, events, text = self.run_variant("events_alone", change)
+        self.assertNotIn("SCRIPT ERROR", text)
+        first_ramp = [t for t, n, a in events if n == "s_ramp_active"][0]
+        started = [t for t, n, a in events if n == "ramp_callout_started" and t >= first_ramp]
+        done = [t for t, n, a in events if n == "ramp_callout_done" and t < first_ramp + 3]
+        self.assertEqual(1, len(done))
+        self.assertAlmostEqual(1.0, done[0] - started[0], delta=0.2)
+
+    def events_queued(self, files):
+        self.base(files, *RAMP_EVENTS)
+
+    def test_events_when_stopped_with_queue(self):
+        """Documented GMC bug: events_when_stopped is posted again when the next sound on the channel ends."""
+        sounds, events, text = self.run_variant("events_queued", self.events_queued)
+        first_ramp = [t for t, n, a in events if n == "s_ramp_active"][0]
+        done = [n for t, n, a in events if n == "ramp_callout_done" and t < first_ramp + 3]
+        self.assertEqual(2, len(done))
+        self.assertIn("Cannot convert argument 1 from Nil to Callable", text)
+
+    @unittest.expectedFailure
+    def test_events_when_stopped_once(self):
+        """What should happen (fails until GMCChannel._trigger_events keeps its own callable)."""
+        sounds, events, text = self.run_variant("events_queued", self.events_queued)
+        first_ramp = [t for t, n, a in events if n == "s_ramp_active"][0]
+        self.assertEqual(1, len([n for t, n, a in events if n == "ramp_callout_done" and t < first_ramp + 3]))
+
+    def test_events_when_stopped_on_both_callouts(self):
+        """Documented GMC bug: with events_when_stopped on both queued callouts, the second one's event is lost."""
+        def change(files):
+            key = "modes/base/config/base.yaml"
+            files[key] = files[key].replace(*RAMP_EVENTS)   # both callouts
+        sounds, events, text = self.run_variant("events_both", change)
+        first_ramp = [t for t, n, a in events if n == "s_ramp_active"][0]
+        done = [t - first_ramp for t, n, a in events if n == "ramp_callout_done" and t < first_ramp + 3]
+        self.assertEqual(1, len(done))
+        self.assertAlmostEqual(1.0, done[0], delta=0.2)
+
+    def test_no_default_bus(self):
+        def change(files):
+            files["gmc.cfg"] = files["gmc.cfg"].replace(', "default": true', "")
+        sounds, events, text = self.run_variant("no_default", change)
+        self.assertIn("Sound played without bus param and no default bus is specified", text)
+        self.assertNotIn("sfx jackpot", sounds[3][0])
+
+
+CAROUSEL_PAGE = "gmc/carousel.md"
+
+CAROUSEL_SCRIPT = """
+event_player:
+  s_doc_shot_active: doc_shot
+
+switch_player:
+  start_event: mode_attract_started
+  steps:
+    - {time: 1s, switch: s_start, action: hit}
+    - {time: 1500ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_right_flipper, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_right_flipper, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_right_flipper, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_left_flipper, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_left_flipper, action: hit}
+    - {time: 100ms, switch: s_left_flipper, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_launch, action: hit}
+    - {time: 500ms, switch: s_doc_shot, action: hit}
+"""
+
+
+def carousel_shown(text):
+    """{probe number: {carousel name: shown child names}} from DOC_CAROUSEL lines (missing = no carousel on screen)."""
+    shots = {int(n): {} for n in re.findall(r"^DOC_DONE (\d+)", text, re.M)}
+    for n, name, shown in re.findall(r"^DOC_CAROUSEL (\d+) (\S+)=(.*?)\r?$", text, re.M):
+        shots.setdefault(int(n), {})[name] = shown
+    return shots
+
+
+@unittest.skipUnless(GODOT and GMC, "set MPF_DOCS_GODOT and MPF_DOCS_GMC to run the GMC checks")
+class TestCarousel(unittest.TestCase):
+    """gmc/carousel.md: the page's machine and award chooser slide, with the shown carousel child read back from GMC."""
+
+    def files(self, change=None):
+        files = page_files(INSTALL_PAGE)
+        files["gmc.cfg"] = with_godot_path(files["gmc.cfg"])
+        files["slides/base.tscn"] = page_files(VARIABLES_PAGE)["slides/base.tscn"]
+        page = page_files(CAROUSEL_PAGE)
+        self.assertEqual({"modes/award_select/config/award_select.yaml", "config/config.yaml",
+                          "modes/base/config/base.yaml", "slides/award_select.tscn"}, set(page))
+        files.update(page)
+        files = with_probe(files, CAROUSEL_SCRIPT)
+        if change:
+            change(files)
+        return files
+
+    def run_game(self, files):
+        run = BothRun(build_project(files), platform="-X")
+        try:
+            self.assertTrue(run.wait_for("DOC_DONE 7", 60), run.text()[-3000:])
+            time.sleep(1)
+            text = run.text()
+            self.assertNotIn("SCRIPT ERROR", text)
+            return carousel_shown(text), label_texts(text), run.events(), text
+        finally:
+            run.stop()
+
+    def test_page_machine(self):
+        shown, labels, events, text = self.run_game(self.files())
+        self.assertEqual(["extra_points", "light_lock", "double_scoring", "extra_points", "double_scoring",
+                          "extra_points"], [shown[n]["award_select"] for n in range(1, 7)])
+        self.assertEqual({}, shown[7])                      # chosen: the mode and its slide are gone
+        self.assertEqual("5,000", labels[7]["Score"])
+        highlighted = [(re.search(r"'item': '(\w+)'", a).group(1), re.search(r"'direction': (\S+?)[,}]", a).group(1))
+                       for t, n, a in events if n == "carousel_item_highlighted"]
+        self.assertEqual([("extra_points", "None"), ("light_lock", "'forwards'"), ("double_scoring", "'forwards'"),
+                          ("extra_points", "'forwards'"), ("double_scoring", "'backwards'"),
+                          ("light_lock", "'backwards'"), ("extra_points", "'backwards'")], highlighted)
+        selected = [a for t, n, a in events if n == "carousel_item_selected"]
+        self.assertEqual(1, len(selected))
+        self.assertIn("'item': 'extra_points'", selected[0])
+
+    def test_no_wrap_and_misnamed_child(self):
+        def change(files):
+            files["modes/award_select/config/award_select.yaml"] = files[
+                "modes/award_select/config/award_select.yaml"].replace(
+                "  select_item_events: s_launch_active\n", "  select_item_events: s_launch_active\n  wrap_items: false\n")
+            files["slides/award_select.tscn"] = files["slides/award_select.tscn"].replace(
+                '[node name="double_scoring" type="Label"', '[node name="doublescoring" type="Label"')
+        shown, labels, events, text = self.run_game(self.files(change))
+        items = [re.search(r"'item': '(\w+)'", a).group(1) for t, n, a in events if n == "carousel_item_highlighted"]
+        self.assertEqual(["extra_points", "light_lock", "double_scoring", "light_lock", "extra_points"], items)
+        self.assertIn("Carousel could not find a child named 'double_scoring' to highlight.", text)
+        self.assertEqual("", shown[3]["award_select"])      # nothing shown for the misnamed item
 
 
 def tearDownModule():

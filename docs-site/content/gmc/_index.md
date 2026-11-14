@@ -20,3 +20,5 @@ These pages were checked with GMC 1.0.0, Godot 4.7.2 and MPF 0.82.0.dev0, by run
 | [Slides and slide_player](/gmc/slides/) | Where slides live, playing and removing them, priorities and the slide stack, and the events GMC sends back. |
 | [Showing scores and variables](/gmc/variables/) | `MPFVariable` labels for player and machine variables, formatting, and values from events, `tokens` and `action: update`. |
 | [Widgets and widget_player](/gmc/widgets/) | Small scenes placed on a slide: position, expiry, the overlay above every slide, and what happens as slides and modes change. |
+| [Sound and sound_player](/gmc/sound/) | Audio buses for music, effects and callouts, playing and stopping sounds, ducking, and the events GMC sends back. |
+| [Choosing from a list: carousels](/gmc/carousel/) | MPF's Carousel mode and GMC's `MPFCarousel` node: an award chooser moved with the flippers. |

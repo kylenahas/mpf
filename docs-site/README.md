@@ -102,6 +102,10 @@ Done:
   player_vars workaround, event args > tokens, action: update); test_gmc.py reads label texts back with a test-only probe.
   widgets (widget files, x/y, expire, widgets stay on their slide, missing target slide warning, _overlay, the
   overlay-not-cleared bug and the remove-from-another-mode workaround); the probe also lists widgets and their slide.
+  sound (sounds/ folder, Godot bus layout + gmc.cfg [sound_system], solo/simultaneous/sequential, default bus,
+  master_volume, ducking, stop); test_gmc.py generates tone WAVs and the probe reports each bus's sounds and volume.
+  carousel (Carousel mode settings and events, MPFCarousel child names, wrap_items, misnamed child warning; conditional
+  items and block_events cited from MPF's test_CarouselMode.py); the probe reports which carousel child is shown.
 - Examples (section weight 4; Reference is 5, For developers 6): end-of-ball-bonus (built-in bonus mode, rollover lanes raising a capped
   multiplier, flipper_cancel hurry-up), multiball-jackpots (counter-started multiball, jackpot mode tied to it,
   super jackpot, growing value), mission-ladder (achievements + group, mission modes with counters and timers,
@@ -130,6 +134,16 @@ Findings from running GMC 1.0.0 with MPF (already reflected in the GMC pages):
 - GMC bug: widgets on `slide: _overlay` aren't removed when the mode that played them stops (`MPFDisplay._on_clear`
   clears only slides in the stack). Workaround: remove them from another mode on `mode_<name>_stopped`. Documented
   with a warn callout; `verify/test_gmc.py::test_overlay_widget_cleared_with_mode` is an expected failure until fixed.
+- GMC bug: a mode's sounds keep playing after it stops unless the mode also uses slide_player or widget_player (GMC
+  ignores `sounds_clear` and only clears sounds on `slides_clear` / `widgets_clear`). Workaround: `action: stop` from
+  another mode on `mode_<name>_stopped`. Expected failure: `test_mode_sound_stopped_with_mode`.
+- GMC bug: `sound_player` `action: stop_looping` is treated as `play` (GMC checks for `loop_stop`), starting a second
+  copy. Expected failure: `test_stop_looping_does_not_add_a_copy`.
+- GMC bug: `events_when_stopped` misfires when another sound follows on the same channel (posted twice with a
+  `disconnect` script error; or, when both sounds set it, the second is lost). Expected failure:
+  `test_events_when_stopped_once`.
+- GMC ignores `sound_player` `volume`, `pan`, `delay`, `priority`, `block`, `about_to_finish_time`,
+  `events_when_looping` and `events_when_about_to_finish`.
 - An `MPFVariable` format string refreshes only when the variable in Variable Name changes; Comma Separate doesn't
   apply to format strings.
 - `slide_player` `transition` / `transition_out` are accepted by MPF but unused by GMC.
