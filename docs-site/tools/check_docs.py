@@ -146,6 +146,8 @@ def check_links():
             url = m.group(1) or m.group(2)
             n += 1
             target = page_for(url)
+            if not target and (CONTENT.parent / "static" / url.split("#")[0].strip("/")).is_file():
+                continue   # a file served from static/ (an image, a recording)
             if not target:
                 err(page, "broken link {}".format(url))
                 continue

@@ -1,6 +1,6 @@
 ---
 title: "Examples"
-weight: 3
+weight: 4
 summary: "Complete rule sets that combine several devices, modeled on rules found in many pinball machines."
 ---
 

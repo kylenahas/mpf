@@ -773,7 +773,7 @@ def build_errors():
 
 
 def build_index(n_events):
-    out = [front("Reference", 4),
+    out = [front("Reference", 5),
            "Generated from the MPF source (version `{}`). Do not edit these pages by hand: run "
            "`docs-site/tools/gen_reference.py`.\n".format(
                re.search(r"__version__ = '([^']+)'", (PKG / "_version.py").read_text()).group(1)),
