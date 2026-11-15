@@ -37,9 +37,10 @@ switches:
     tags: major_shot, playfield_active
 ```
 
-A switch with a tag posts two events when it's hit, `sw_<tag>` and then `sw_<tag>_active`, so each of the three posts
-`sw_major_shot` and `sw_major_shot_active`. The rest of the example only uses those two events, so to make another shot a
-major shot, give its switch the tag. Why it needs both is explained [below](#why-two-events).
+Each of the three switches posts `sw_major_shot` and then `sw_major_shot_active` when it's hit (see
+[events a switch posts](/build/switches-and-coils/#events-a-switch-posts)). The rest of the example only uses those
+two events, so to make another shot a major shot, give its switch the tag. Why it needs both is explained
+[below](#why-two-events).
 
 ### A mode for the combo window
 
@@ -80,7 +81,9 @@ variable_player:
 ```
 
 Each time the window opens, `combo_count` is set back to 0. Each major shot while the mode runs adds 1 and scores
-10,000 times the new count. The lines run in the order they're written, so `score` sees the count after the increase.
+10,000 times the new count. The lines run in the order they're written
+([variable_player](/build/shots-and-scoring/#scoring-with-variable_player)), so `score` sees the count after the
+increase.
 
 In the test run, the major shot that started the mode didn't count as a combo: its `sw_major_shot_active` had already
 been handled when the mode's `variable_player` was set up. The first combo is the second shot.
@@ -88,7 +91,8 @@ been handled when the mode's `variable_player` was set up. The first combo is th
 ### Why two events
 
 The mode starts on `sw_major_shot` but scores on `sw_major_shot_active`. Using `sw_major_shot` for both isn't allowed:
-MPF refuses a mode whose `variable_player` uses one of the mode's own start events. In a first version that did, the
+MPF refuses a mode whose `variable_player` uses one of the mode's own start events (see
+[errors that only appear later](/build/debugging/#errors-that-only-appear-later)). In a first version that did, the
 first major shot stopped MPF with:
 
 ```text

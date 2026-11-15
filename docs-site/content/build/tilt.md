@@ -78,7 +78,7 @@ ignores warning-switch hits that come too soon after the last warning, so one nu
 setting `multiple_hit_window`, and its default is 300 ms.
 
 To change it, add the tilt mode's config to your machine as `modes/tilt/config/tilt.yaml`, with only the setting you
-change. MPF merges it over its own copy of the mode:
+change (see [Changing a built-in mode](/build/modes/#changing-a-built-in-mode)):
 
 ```yaml
 #config_version=6
@@ -154,8 +154,8 @@ spec:
 | `tilt_events`, `tilt_warning_events`, `tilt_slam_tilt_events` | none | Events that tilt, warn or slam tilt like a switch hit would. A warning from an event isn't debounced (`Tilt.mode_start`). |
 
 To change them, add `modes/tilt/config/tilt.yaml` to your machine with a `tilt:` section holding only what you
-change. MPF merges it over its own copy. The [Tilt with warnings](/examples/ball-in-play/tilt/#the-settings) example
-does this with `warnings_to_tilt: 2`.
+change; see [Changing a built-in mode](/build/modes/#changing-a-built-in-mode), which does this with
+`warnings_to_tilt: 2`.
 
 ## Showing it to the player
 

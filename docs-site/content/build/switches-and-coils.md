@@ -55,6 +55,10 @@ When a switch changes, MPF can post these events (`mpf/devices/switch.py`):
 
 In the test run, pressing `s_action_button` posted both `s_action_button_active` and its configured `knock` event.
 
+A tagged switch posts `sw_<tag>` and then `sw_<tag>_active` for the same hit, so one hit gives two events. The
+[Combos](/examples/scoring/combos/#why-two-events) example uses that to start a mode on the first and score in it on
+the second, since a mode's players can't use the mode's own start event.
+
 {{< note >}}
 For speed, MPF only posts these events when something listens for them (a handler in your config or code), or when
 the switch has `debug: true`. You will not see `s_start_active` in the log unless something uses it. The patterns

@@ -56,14 +56,13 @@ variable_player:
 ```
 
 `hurry_up_value` is a player variable, set to 200,000 each time the mode starts and lowered by 5,000 on each tick.
-Two details of the timer's ticks decide the numbers:
+Two [details of a timer's ticks](/build/events/#something-happens-over-time) decide the numbers:
 
-- **A tick when the timer starts.** MPF posts `timer_hurry_up_clock_tick` with `ticks: 0` as soon as the timer
-  starts, so a display can show the starting value (`Timer.start`). The `{ticks>0}` condition skips it, so the value
-  starts at 200,000 whichever of the mode's handlers runs first.
-- **No tick on the last step.** Steps 1 to 29 post a tick, but step 30 posts only `_complete`. So the value is lowered
-  29 times and the last value is 55,000, not 50,000. That doesn't change what the player can collect, since it ends at
-  that moment, but it matters if a display shows the value or you compute it from the time.
+- MPF posts a tick with `ticks: 0` as soon as the timer starts. The `{ticks>0}` condition skips it, so the value starts
+  at 200,000 whichever of the mode's handlers runs first.
+- Step 30 posts only `_complete`, not a tick. So the value is lowered 29 times and the last value is 55,000, not
+  50,000. That doesn't change what the player can collect, since it ends at that moment, but it matters if a display
+  shows the value.
 
 To show the value on a screen while it counts down, display the player variable `hurry_up_value`; with GMC, that's an
 `MPFVariable` label (see [Showing scores and variables](/gmc/variables/)).

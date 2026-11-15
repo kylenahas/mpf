@@ -67,8 +67,9 @@ variable_player:
 
 `sw_drop_target` is posted when any switch tagged `drop_target` is hit, so one entry scores all three targets.
 
-The clear both scores the value and raises it. The lines run in the order they're written, so `score` uses the value
-from before the increase: in the test run, the first clear scored 5,000 and the next one 10,000.
+The clear both scores the value and raises it. The lines run in the order they're written
+([variable_player](/build/shots-and-scoring/#scoring-with-variable_player)), so `score` uses the value from before the
+increase: in the test run, the first clear scored 5,000 and the next one 10,000.
 
 {{< note >}}
 **Don't raise the value on `drop_target_bank_main_bank_up`.** It looks like a tidy place for it, once the bank has
@@ -76,9 +77,8 @@ reset. But the bank also posts `_up` when it resets at the start of a ball with 
 that did this, a ball that drained with one target down raised the value from 15,000 to 20,000 without a clear.
 {{< /note >}}
 
-The drop targets' switches have the `drop_target` tag but not `playfield_active`: like a kickback, a drop target
-already tells the playfield the ball is there, and MPF stops at startup with `CFE-drop_target-1` if its switch has the
-tag.
+The drop targets' switches have the `drop_target` tag but not `playfield_active` (see
+[switches that report the ball themselves](/build/flippers-and-autofire/#switches-that-report-the-ball-themselves)).
 
 ### Lighting and collecting the extra ball
 
@@ -98,9 +98,10 @@ extra_balls:
     light_events: light_bank_extra_ball
 ```
 
-The counter is in the `base` mode, which stops at the end of every ball. `persist_state: true` stores its count in the
-player, so two clears on one ball and one on the next still light the extra ball. When it completes, the counter resets
-and disables itself (the defaults), and with `persist_state` it stays disabled for the rest of that player's game.
+`persist_state: true` keeps the count in the player from ball to ball
+([counters](/build/events/#something-was-hit-n-times)), so two clears on one ball and one on the next still light the
+extra ball. When it completes, the counter resets and disables itself, and it stays disabled for the rest of that
+player's game, so the extra ball is lit only once.
 
 The group in the machine config collects it at the scoop and holds the limit:
 

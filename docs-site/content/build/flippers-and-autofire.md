@@ -117,8 +117,8 @@ autofire_coils:
   `default_recycle: false` or `coil_overwrite` sets `recycle: false` (`AutofireCoil.enable`).
 - `reverse_switch: true` fires when the switch *opens*, for opto switches.
 - `coil_pulse_delay` delays the pulse after the switch closes, on platforms that support it.
-- Each hit tells the playfield a ball is there, so **do not** tag these switches `playfield_active`. MPF refuses to
-  start ("Remove the redundant 'playfield_active' tag from that switch", error 1).
+- Each hit tells the playfield a ball is there, so **do not** tag these switches `playfield_active` (see
+  [below](#switches-that-report-the-ball-themselves)).
 
 ### Stopping a stuck pop bumper
 
@@ -162,6 +162,24 @@ kickbacks:
 In the test run, the kickback was on when the ball started, fired once and removed its rule, and came back on when
 `light_kickback` was posted. Setting `disable_events` replaces the default list, so `ball_will_end` and
 `service_mode_entered` are repeated here.
+
+## Switches that report the ball themselves
+
+Some devices tell the playfield a ball is there each time their switch is hit, so their switches must **not** have
+the `playfield_active` tag. With the tag, MPF stops at startup with "Remove the redundant 'playfield_active' tag from
+that switch". The error code names the device type:
+
+| Device | Error code |
+|---|---|
+| `autofire_coils` (slingshots, pop bumpers) | `CFE-autofire-1` |
+| `kickbacks` | `CFE-kickback-1` |
+| `drop_targets` | `CFE-drop_target-1` |
+
+Each was checked in a test run with the tag added: the kickback in
+[Ball save, kickback and outlanes](/examples/ball-in-play/ball-save-and-kickback/), the drop targets in
+[Drop target bank and extra ball](/examples/ball-in-play/drop-targets-extra-ball/), and the pop bumpers in
+[Pop bumpers and super pops](/examples/scoring/super-pops/). Other tags, such as `drop_target` or `pop` for `sw_` events,
+are fine.
 
 ## The complete config
 

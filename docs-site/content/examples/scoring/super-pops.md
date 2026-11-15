@@ -48,8 +48,8 @@ autofire_coils:
     switch: s_pop_bottom
 ```
 
-The switches don't have the `playfield_active` tag: like a kickback, an autofire coil already tells the playfield the
-ball is there, and MPF stops at startup with `CFE-autofire-1` if its switch has the tag.
+The switches don't have the `playfield_active` tag (see
+[switches that report the ball themselves](/build/flippers-and-autofire/#switches-that-report-the-ball-themselves)).
 
 ### The pop value and its levels
 
@@ -77,7 +77,8 @@ variable_player:
 
 Each pop scores the current value. The `pop_level` counter completes on every 25th pop: it resets itself
 (`reset_on_complete` is `true` by default), and `disable_on_complete: false` keeps it counting for the next 25.
-`persist_state: true` keeps its count in the player, so 20 pops on one ball and 5 on the next still make a level.
+`persist_state: true` keeps its count in the player ([counters](/build/events/#something-was-hit-n-times)), so 20 pops
+on one ball and 5 on the next still make a level.
 
 The pop that completes a level still scores the old value: the `sw_pop` scoring is handled first, and
 `pop_level_up` is an event the counter posts afterwards. In the test run, the 25th pop scored 100 and the 26th 200.

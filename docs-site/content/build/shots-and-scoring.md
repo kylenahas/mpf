@@ -32,6 +32,11 @@ variable_player:
   that name; MPF posts `player_<name>` whenever one changes.
 - A value can be a placeholder expression such as `current_player.ramps * 10`, from MPF's tests
   (`variable_player/modes/mode2/config/mode2.yaml`).
+- Several variables under one event change in the order they're written. A `score:` line after an increase sees the
+  new value, and one before it sees the old value. In test runs, the [Combos](/examples/scoring/combos/#scoring-the-chain)
+  example increases its count and then scores it, and the
+  [Drop target bank](/examples/ball-in-play/drop-targets-extra-ball/#a-value-that-grows) example scores the bank value
+  and then raises it.
 - The long form sets more options:
 
 ```yaml

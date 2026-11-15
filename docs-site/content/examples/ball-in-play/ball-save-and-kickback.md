@@ -83,8 +83,8 @@ kickbacks:
 
 When it's enabled, the kickback is a hardware rule: the outlane switch fires the coil directly, without waiting for
 MPF. Each time it fires, it posts `kickback_left_kickback_fired`, and `disable_events` turns it off on that event, so it
-fires once. `disable_events` replaces the default list, so `ball_will_end` and `service_mode_entered` are repeated. A
-lit kickback is therefore lost when the ball ends.
+fires once. `ball_will_end` and `service_mode_entered` are the defaults, repeated because `disable_events` replaces
+them (see [kickbacks](/build/flippers-and-autofire/#kickbacks)). A lit kickback is therefore lost when the ball ends.
 
 ### Scoring
 
@@ -125,10 +125,8 @@ In the first version, with `s_left_outlane_active` also in `early_ball_save_even
 lit posted both `kickback_left_kickback_fired` and `saving_ball`, and 3 seconds later there were 2 balls on the
 playfield with 1 ball in play.
 
-{{< note >}}
-**A kickback switch can't have the `playfield_active` tag.** MPF stops at startup with `CFE-kickback-1`: the kickback
-already tells the playfield the ball is there. The left outlane switch above has no tags for that reason.
-{{< /note >}}
+The left outlane switch has no `playfield_active` tag, because it belongs to the kickback (see
+[switches that report the ball themselves](/build/flippers-and-autofire/#switches-that-report-the-ball-themselves)).
 
 ## The complete machine
 

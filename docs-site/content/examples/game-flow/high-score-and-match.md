@@ -68,8 +68,8 @@ did nothing.
 ### High scores
 
 The `high_score` mode's table is set in the mode's own config, which you copy into your machine as
-`modes/high_score/config/high_score.yaml`. It's merged over MPF's copy, so it only needs the `high_score:` section,
-but see the warning below about `_overwrite`:
+`modes/high_score/config/high_score.yaml` (see
+[Changing a built-in mode](/build/modes/#changing-a-built-in-mode)):
 
 ```yaml
 #config_version=6
@@ -93,11 +93,9 @@ high_score:
 ```
 
 {{< warn >}}
-**Lists in a built-in mode's config are added to MPF's lists, not swapped for them.** When your copy of a mode's config
-is merged over MPF's, a list is appended to the list in MPF's copy (`Util.dict_merge`). In a first version without
-`_overwrite`, the table started with MPF's own five default scores (`BRI`, `GHK`, ...), the four defaults above were
-added after them, and a player in fifth place was offered `HIGH SCORE 4`, a place from MPF's list. `_overwrite: true`
-inside `categories` and `defaults` makes MPF replace them with yours.
+**`_overwrite: true` is needed in both lists.** MPF appends a list in your copy of a built-in mode to its own. In a first
+version without `_overwrite`, the table started with MPF's own five default scores (`BRI`, `GHK`, ...), the four
+defaults above were added after them, and a player in fifth place was offered `HIGH SCORE 4`, a place from MPF's list.
 {{< /warn >}}
 
 - `categories` lists the places in order. `score` is the player variable that's compared; another category can rank

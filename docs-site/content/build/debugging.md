@@ -100,6 +100,7 @@ part to look for. (MPF copies `eject_coil` and `ball_switches` into these sub-co
 |---|---|---|
 | A switch with no `number:` line at all | `Required setting "number:" is missing from section "switches:s_trough1:" in your config.` | Add `number:` (it may be empty on the virtual platforms, but it must be there). |
 | A ball device with no eject coil | `Configuration error in bd_trough ball device. Device needs an eject_coil, a hold_coil, or "mechanical_eject: True"` | See [ball devices](/build/ball-devices/). |
+| A slingshot, pop bumper, kickback or drop target switch tagged `playfield_active` | `... uses switch 's_pop_left' which has a 'playfield_active' tag. This is handled internally by the device. Remove the redundant 'playfield_active' tag from that switch.`, with `CFE-autofire-1`, `CFE-kickback-1` or `CFE-drop_target-1` | Remove the tag ([switches that report the ball themselves](/build/flippers-and-autofire/#switches-that-report-the-ball-themselves)). |
 
 ### Errors that only appear later
 

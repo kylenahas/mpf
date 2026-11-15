@@ -71,6 +71,11 @@ load only on pages that use it; `poster` is the frame shown before play). Front 
   page. Change the page, rerun the tests. For multi-file machines, put a line holding only the file path
   (`` `modes/base/config/base.yaml`: ``) before each block; `page_files()` picks those up, and a block labelled
   `config/config.yaml` is the machine config.
+- Each fact is explained once, in its Build guide; examples and other pages give one line and a link. Homes so far:
+  changing a built-in mode and `_overwrite` (Modes), `playfield_active` on device switches (Flippers and autofire),
+  `sw_<tag>` / `sw_<tag>_active` (Switches and coils), `variable_player` line order (Shots and scoring), counters'
+  `persist_state` and timer tick details (Events), tilt settings and events (Tilt). Complete machines at the end of
+  each page stay whole, so the machine config repeats on purpose.
 
 ## Status (2026-11-13)
 

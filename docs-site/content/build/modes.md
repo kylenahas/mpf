@@ -232,7 +232,40 @@ them). The others load when you add them to your `modes:` list, without needing 
 `bonus`, `carousel`, `credits`, `high_score`, `match`, `service`, `tilt` and the service display modes. The
 [built-in modes](/reference/builtin-modes/) reference lists their settings and events.
 
+### Changing a built-in mode
+
 To change a built-in mode, create a file of the same name in your machine folder, for example
 `modes/attract/config/attract.yaml`. MPF loads its own file first and then yours on top (`ConfigLoader._load_modes`),
 so your file only needs the settings you change. The `attract.yaml` that `mpf init` creates works this way: it only
-adds a `slide_player` entry.
+adds a `slide_player` entry. The mode still has to be in your `modes:` list.
+
+For example, `modes/tilt/config/tilt.yaml` with only this tilts on the second hit of the plumb bob instead of the
+third (see [Tilt](/build/tilt/#the-settings)):
+
+```yaml
+#config_version=6
+
+tilt:
+  warnings_to_tilt: 2
+```
+
+In the test run, the first hit of the bob was a warning and the second tilted. A single value like this replaces
+MPF's. Read the settings once, when the mode starts: restart MPF after changing the file.
+
+{{< warn >}}
+**A list in your file is added to MPF's list, not swapped for it.** MPF merges the two files with
+`Util.dict_merge`, which appends lists. For a setting that holds lists, such as the `high_score` mode's `categories`
+and `defaults`, put `_overwrite: true` inside it to replace MPF's version:
+
+```yaml
+high_score:
+  categories:
+    _overwrite: true
+    score:
+      - GRAND CHAMPION
+      - HIGH SCORE 1
+```
+
+Without it, MPF's own five default high scores stayed in the table and your places were added after its places (see
+[High scores, match and credits](/examples/game-flow/high-score-and-match/#high-scores)).
+{{< /warn >}}

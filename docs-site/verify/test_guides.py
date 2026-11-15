@@ -2521,6 +2521,10 @@ class TestExampleSuperPopsPlayfieldActiveTag(GuideMachine):
     @expect_startup_error()
     def test_refused(self):
         self.assertRegex(str(self.startup_error), "CFE-autofire-1")
+        message = ("uses switch 's_pop_left' which has a 'playfield_active' tag. This is handled internally by the "
+                   "device. Remove the redundant 'playfield_active' tag from that switch.")
+        self.assertIn(message, str(self.startup_error))
+        self.assertIn(message, (CONTENT / "build/debugging.md").read_text(encoding="utf-8"))
 
 
 MULT_PAGE = "examples/scoring/playfield-multiplier.md"
@@ -2709,11 +2713,12 @@ class TestExampleTilt(TiltMachine):
 
 
 class TestExampleTiltOverride(TiltMachine):
-    """The page: a modes/tilt/config/tilt.yaml with warnings_to_tilt: 2 tilts on the second hit."""
+    """build/modes.md "Changing a built-in mode": a modes/tilt/config/tilt.yaml with warnings_to_tilt: 2 tilts on the
+    second hit (run on the tilt example's machine)."""
 
     @classmethod
     def setUpClass(cls):
-        page = (CONTENT / TILT_PAGE).read_text(encoding="utf-8")
+        page = (CONTENT / "build/modes.md").read_text(encoding="utf-8")
         block = "```yaml\n#config_version=6\n\ntilt:\n  warnings_to_tilt: 2\n```"
         assert block in page
         cls.machine_dir = example_machine(TILT_PAGE)

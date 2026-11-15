@@ -40,12 +40,8 @@ time at the plunger, or waits for a skill shot, doesn't lose any of the save.
 
 In the test run, the ball waited 20 seconds in the lane: `ball_save_start_save_enabled` was posted at the start of the
 ball, but nothing else until the launch button was pressed. The timer started when the ball reached the playfield.
-
-{{< note >}}
-Use the eject success of the device that puts the ball on the playfield: the plunger lane here, the trough if it ejects
-straight to the playfield. Not `playfield_active`, which can be skipped (see the
-[ball saves guide](/build/ball-saves-and-extra-balls/#the-timeline)).
-{{< /note >}}
+Use the eject success of whichever device puts the ball on the playfield, not `playfield_active`; the
+[ball saves guide](/build/ball-saves-and-extra-balls/#the-timeline) explains why.
 
 ### Warn before it runs out, and forgive a late drain
 

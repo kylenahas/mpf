@@ -19,72 +19,38 @@ for 5 seconds. The slam tilt switch on the coin door ends the whole game.
 
 ## How it works
 
-### Turning tilt on
+The [Tilt guide](/build/tilt/) explains the `tilt` mode in full: its switches, warnings and debounce, what a tilt shuts
+off, and its settings and events. This example uses it as it comes, with MPF's default settings. Three things make up
+the rule:
 
-The `tilt` mode comes with MPF but, like other built-in modes, only runs if it's in the `modes:` list:
+- **`tilt` and `bonus` in the `modes:` list.** Both come with MPF; neither needs a config file of its own here, apart
+  from the bonus entries.
 
-```yaml
-modes:
-  - base
-  - bonus
-  - tilt
-```
+  ```yaml
+  modes:
+    - base
+    - bonus
+    - tilt
+  ```
 
-It starts when the machine starts and runs all the time, in and out of games. It doesn't need any config of its own; it
-finds its switches by tag:
+- **Two tagged switches.** The plumb bob has the `tilt_warning` tag and the coin door's slam switch has `slam_tilt`:
 
-```yaml
-switches:
-  s_plumb_bob:
-    number:
-    tags: tilt_warning
-  s_slam_tilt:
-    number:
-    tags: slam_tilt
-```
+  ```yaml
+  switches:
+    s_plumb_bob:
+      number:
+      tags: tilt_warning
+    s_slam_tilt:
+      number:
+      tags: slam_tilt
+  ```
 
-| Tag | What a hit does |
-|---|---|
-| `tilt_warning` | A warning; the last allowed warning tilts instead. |
-| `tilt` | Tilts at once (for a switch that should never be touched). |
-| `slam_tilt` | Tilts and ends the game. |
+- **The defaults:** `warnings_to_tilt: 3` (two warnings, then a tilt), a 300 ms
+  [tilt debounce](/build/tilt/#tilt-debounce), and a 5 s `settle_time`. To change one, see
+  [Changing a built-in mode](/build/modes/#changing-a-built-in-mode), which uses `warnings_to_tilt: 2` as its example.
 
-### The settings
-
-These are the `tilt` mode's defaults, from `mpf/modes/tilt/config/tilt.yaml` and the `tilt:` section of the config
-spec, and this example keeps them all:
-
-| Setting | Default | What it does |
-|---|---|---|
-| `warnings_to_tilt` | `3` | The hit that brings the player's warnings to this number tilts. So 3 means two warnings, then a tilt. |
-| `multiple_hit_window` | `300ms` | The [tilt debounce](/build/tilt/#tilt-debounce): warning-switch hits this soon after the last warning are ignored. |
-| `settle_time` | `5s` | After a tilt, the next ball waits until no warning switch has been hit for this long. |
-| `reset_warnings_events` | `ball_will_end` | When the player's warnings go back to 0. |
-| `tilt_warnings_player_var` | `tilt_warnings` | The player variable that counts warnings. |
-
-To change one, copy the mode into your machine: a `modes/tilt/config/tilt.yaml` with `#config_version=6` and a `tilt:`
-section is merged over MPF's own.In a test run with only `warnings_to_tilt: 2` in that file,
-the second hit of the bob tilted, after one warning.
-
-```yaml
-#config_version=6
-
-tilt:
-  warnings_to_tilt: 2
-```
-
-### Events
-
-| Event | When |
-|---|---|
-| `tilt_warning` | A warning, with `warnings` (so far) and `warnings_remaining` |
-| `tilt_warning_1`, `tilt_warning_2`, ... | The same warning, numbered in the name |
-| `tilt` | The player tilted |
-| `tilt_clear` | The tilt is over and the bob has settled; the next ball can start |
-| `slam_tilt` | The slam tilt switch was hit |
-
-Use them for lights, sounds and slides. The `tilt` mode already plays a `tilt` slide on these events if you use a media
-controller with a slide of that name.
+The mode's events, `tilt_warning`, `tilt` and `tilt_clear`, are what lights, sounds and slides would use; see
+[Showing it to the player](/build/tilt/#showing-it-to-the-player).
 
 ## What happened in the test run
 

@@ -184,6 +184,16 @@ Setting `events_when_complete` **replaces** the default event `logicblock_<name>
 `logicblock_ramp_counter_complete` was never posted.
 {{< /note >}}
 
+When a counter completes, it resets to 0 and disables itself by default (`reset_on_complete` and
+`disable_on_complete`). Set `disable_on_complete: false` to keep it counting toward the next completion.
+
+To keep a counter's count from one ball to the next, add `persist_state: true`. The count, and whether the counter is
+enabled, is stored in the player, so each player has their own. A counter in the `base` mode, which stops at the end of
+every ball, then picks up where the player left off. In test runs, two drop target bank clears on one ball and one on
+the next completed a three-clear counter
+([Drop target bank and extra ball](/examples/ball-in-play/drop-targets-extra-ball/#lighting-and-collecting-the-extra-ball)),
+and a counter that had completed and disabled itself stayed disabled for the rest of that player's game.
+
 ### Something happens over time
 
 A **timer** (valid in modes only) counts and posts `timer_<name>_tick` each step, with `ticks` and
@@ -208,6 +218,14 @@ event_player:
 
 In the test run, the timer started on the third ramp, posted `hurry_up_halfway` 5 seconds later and `hurry_up_missed`
 after 10.
+
+{{< note >}}
+**Two details of the ticks.** A timer posts a `_tick` with its starting value as soon as it starts, so a display can
+show it (`Timer.start`). A handler that changes something on every tick also runs then; for a timer counting up from 0,
+`{ticks>0}` skips it. And the step that reaches `end_value` posts only `_complete`, not a `_tick`. In the
+[Hurry-up](/examples/scoring/hurry-up/#the-value) example's test run, a timer counting from 0 to 30 posted ticks 0 to
+29 and then `_complete`.
+{{< /note >}}
 
 ### Only while something is true
 
