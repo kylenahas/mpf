@@ -88,8 +88,12 @@ Done:
   |block, four shot hit events, custom profile, shot group hit/complete/rotate/reset, per-player shot state); shows
   (verified: duration/time steps, fade, show file with token, loops, events_when_completed, shot lights via
   show_tokens); debugging (verified: 15 config mistakes with the exact message each prints, errors that only appear
-  at first use, empty-trough start refusal from a real `mpf game -X` run); multiball (verified: two-ball VUK lock,
-  lock-full starts a 3-ball multiball from the lock and trough, shoot_again, ball_lost/ended, lock reset per player);
+  at first use, empty-trough start refusal from a real `mpf game -X` run); multiball (verified: three-ball VUK lock
+  releasing all three with balls_to_replace + eject_all_events, physical vs virtual locks, shoot_again,
+  ball_lost/ended, lock reset per player); tilt (verified: tags, warnings and multiple_hit_window, saved drains keep
+  warnings, what a tilt shuts off, multiball and extra ball/slam interactions, settle time, attract-mode behaviour);
+  polishing (verified: save timer from the plunger eject, hurry-up/grace with a shoot-again light show, early save,
+  auto-launched saved ball, multiball hurry-up/grace, ball search on with flipper-cradle blocking);
   ball-saves-and-extra-balls (verified: save timeline, saving and early saves, extra ball light/collect/replay,
   group limits, lit memory).
 - Media controller (GMC) (section weight 3): install-and-connect (Godot project in the machine folder, add-on copied

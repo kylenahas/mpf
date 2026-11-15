@@ -2936,5 +2936,312 @@ class TestExampleMultiplayer(ExampleMachine):
         self.assertEqual((1, 1, 1, 1000, "", None, 5), self.state())
 
 
+TILT_BUILD_PAGE = "build/tilt.md"
+
+
+class TiltBuildMachine(ExampleMachine):
+    WATCH = ("tilt_warning", "tilt", "tilt_clear", "slam_tilt", "ball_started", "ball_ended", "game_ended",
+             "ball_save_start_save_saving_ball", "multiball_main_mb_started", "multiball_main_mb_ended",
+             "extra_ball_awarded")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(TILT_BUILD_PAGE)
+
+    def setUp(self):
+        super().setUp()
+        self.log = []
+        for name in self.WATCH:
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+
+    def begin(self):
+        self.start_game()
+        self.advance_time_and_run(3)
+        del self.log[:]
+
+    def drain(self):
+        # after a tilt, balls_in_play is 0, so drain_all_balls() would not drain anything
+        self.machine.default_platform.add_ball_to_device(self.machine.ball_devices["bd_trough"])
+
+    def events(self):
+        events = list(self.log)
+        del self.log[:]
+        return events
+
+    def live(self):
+        return (self.machine.flippers["left_flipper"]._enabled, self.machine.autofire_coils["left_sling"]._enabled)
+
+
+class TestTiltBuildOutsideGame(TiltBuildMachine):
+    """build/tilt.md: in attract mode, only the slam tilt switch posts anything."""
+
+    def test_attract(self):
+        for switch in ("s_plumb_bob", "s_playfield_tilt", "s_slam_tilt"):
+            self.hit(switch)
+        self.assertEqual(["slam_tilt"], self.events())
+        self.assertIsNone(self.machine.game)
+
+
+class TestTiltBuildTilt(TiltBuildMachine):
+    """build/tilt.md "What a tilt does": the tilt switch, scoring, flippers, autofire, ball save, settle time."""
+
+    def test_tilt(self):
+        self.begin()
+        self.hit("s_target")
+        self.assertEqual((True, True), self.live())
+        self.hit("s_playfield_tilt")
+        self.assertEqual(["tilt"], self.events())
+        self.assertTrue(self.machine.game.tilted)
+        self.assertEqual((False, False), self.live())
+        self.assertModeNotRunning("base")
+        self.hit("s_target")
+        self.assertEqual(100, self.machine.game.player.score)
+        self.drain()
+        self.advance_time_and_run(1)
+        self.assertEqual(["tilt_clear", "ball_ended", "ball_started"], self.events())
+        self.assertEqual(2, self.machine.game.player.ball)
+        self.assertEqual((True, True), self.live())
+
+    def test_no_save_and_settle(self):
+        self.begin()
+        self.hit("s_plumb_bob")
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")  # third hit: tilt, during the ball save
+        self.assertEqual(["tilt_warning", "tilt_warning", "tilt"], self.events())
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")  # still swinging
+        last_bob = self.machine.clock.get_time() - .1
+        self.drain()
+        self.advance_time_and_run(4.7)
+        self.assertEqual([], self.events())
+        self.advance_time_and_run(.5)
+        self.assertEqual(["tilt_clear", "ball_ended", "ball_started"], self.events())
+        self.assertLess(self.machine.clock.get_time() - last_bob, 5.4)
+        self.assertNotIn("ball_save_start_save_saving_ball", self.log)
+
+
+class TestTiltBuildMultiball(TiltBuildMachine):
+    """build/tilt.md: a tilt during a multiball waits for every ball."""
+
+    def test_multiball(self):
+        self.begin()
+        self.hit("s_scoop")
+        self.advance_time_and_run(4)
+        self.assertEqual((["multiball_main_mb_started"], 2), (self.events(), self.machine.playfield.balls))
+        self.hit("s_playfield_tilt")
+        self.drain()
+        self.advance_time_and_run(2)
+        self.assertEqual(["tilt", "multiball_main_mb_ended"], self.events())
+        self.advance_time_and_run(10)
+        self.assertTrue(self.machine.game.tilted)
+        self.assertEqual(1, self.machine.game.player.ball)
+        self.drain()
+        self.advance_time_and_run(2)
+        self.assertEqual(["tilt_clear", "ball_ended", "ball_started"], self.events())
+
+
+class TestTiltBuildExtraBall(TiltBuildMachine):
+    """build/tilt.md: a tilt ends the ball, not the turn; a slam tilt forfeits the extra ball and ends the game."""
+
+    def test_tilt_keeps_extra_ball(self):
+        self.begin()
+        self.hit("s_eb_target")
+        self.assertEqual(["extra_ball_awarded"], self.events())
+        self.hit("s_playfield_tilt")
+        self.drain()
+        self.advance_time_and_run(2)
+        self.assertEqual(["tilt", "tilt_clear", "ball_ended", "ball_started"], self.events())
+        self.assertEqual((1, 1), (self.machine.game.player.number, self.machine.game.player.ball))
+
+    def test_slam_forfeits(self):
+        self.begin()
+        self.hit("s_eb_target")
+        self.assertEqual(1, self.machine.game.player.extra_balls)
+        del self.log[:]
+        self.hit("s_slam_tilt")
+        self.drain()
+        self.advance_time_and_run(2)
+        self.assertEqual(["slam_tilt", "tilt", "tilt_clear", "ball_ended", "game_ended"], self.events())
+        self.assertIsNone(self.machine.game)
+
+
+class TestTiltBuildWarnings(TiltBuildMachine):
+    """build/tilt.md "Warnings": a saved drain keeps them, the end of the ball resets them."""
+
+    def test_saved_drain_keeps_warnings(self):
+        self.begin()
+        self.hit("s_plumb_bob")
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.hit("s_plumb_bob")  # within multiple_hit_window
+        self.assertEqual(2, self.machine.game.player.tilt_warnings)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertIn("ball_save_start_save_saving_ball", self.events())
+        self.assertEqual(2, self.machine.game.player.tilt_warnings)
+        self.hit("s_plumb_bob")
+        self.assertEqual(["tilt"], self.events())
+
+    def test_reset_at_ball_end(self):
+        self.begin()
+        self.hit("s_plumb_bob")
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.advance_time_and_run(15)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertEqual((2, 0), (self.machine.game.player.ball, self.machine.game.player.tilt_warnings))
+        del self.log[:]
+        self.hit("s_plumb_bob")
+        self.assertEqual((["tilt_warning"], 1), (self.events(), self.machine.game.player.tilt_warnings))
+
+
+POLISH_PAGE = "build/polishing.md"
+
+
+class PolishMachine(ExampleMachine):
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(POLISH_PAGE)
+
+    def setUp(self):
+        super().setUp()
+        self.log = []
+        for name in ("ball_started", "ball_ended", "ball_save_start_save_enabled", "ball_save_start_save_timer_start",
+                     "ball_save_start_save_hurry_up", "ball_save_start_save_grace_period",
+                     "ball_save_start_save_disabled", "ball_save_start_save_saving_ball",
+                     "balldevice_bd_plunger_ball_eject_success", "multiball_main_mb_started",
+                     "multiball_main_mb_hurry_up", "multiball_main_mb_grace_period", "multiball_main_mb_shoot_again",
+                     "multiball_main_mb_ended", "flipper_cradle", "ball_search_started", "ball_search_stopped"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append((name, kwargs)),
+                                            priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+
+    def events(self):
+        events = [n for n, a in self.log]
+        del self.log[:]
+        return events
+
+    def launch(self):
+        """Press the launch button; the first playfield switch confirms the eject and starts the save's timer."""
+        self.hit_and_release_switch("s_launch")
+        self.advance_time_and_run(.5)
+        self.hit("s_target")
+
+    def light_on(self):
+        return self.machine.lights["l_shoot_again"].get_color().red > 0
+
+
+class TestPolishBallSave(PolishMachine):
+    """build/polishing.md: the save waits for the plunge; the light flashes, flashes fast, goes out for the grace."""
+
+    def test_timer_waits_for_plunge(self):
+        self.assertEqual(["ball_save_start_save_enabled", "ball_started"], self.events())
+        self.advance_time_and_run(20)
+        self.assertEqual([], self.events())
+        self.assertEqual(1, self.machine.ball_devices["bd_plunger"].balls)
+        self.launch()
+        self.assertEqual(["balldevice_bd_plunger_ball_eject_success", "ball_save_start_save_timer_start"],
+                         self.events())
+
+    def test_light(self):
+        self.launch()
+        samples = ""
+        for _ in range(56):
+            self.advance_time_and_run(.25)
+            samples += "#" if self.light_on() else "."
+        page = (CONTENT / POLISH_PAGE).read_text(encoding="utf-8")
+        self.assertIn(samples, page)
+        self.assertEqual("###....####....####....#####.#.#.#.#.#..................", samples)
+        self.assertEqual(["ball_save_start_save_hurry_up", "ball_save_start_save_grace_period",
+                          "ball_save_start_save_disabled"], self.events()[4:])
+
+    def test_grace_saves_and_relaunches(self):
+        self.launch()
+        self.advance_time_and_run(11)
+        self.assertFalse(self.light_on())
+        del self.log[:]
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertEqual(["ball_save_start_save_saving_ball", "ball_save_start_save_disabled"], self.events())
+        self.advance_time_and_run(5)
+        # the saved ball left the plunger lane without the launch button
+        self.assertEqual(["balldevice_bd_plunger_ball_eject_success"], self.events())
+        self.assertEqual((1, 0, 1), (self.machine.game.player.ball, self.machine.ball_devices["bd_plunger"].balls,
+                                     self.machine.playfield.balls))
+
+    def test_after_grace_ends_ball(self):
+        self.launch()
+        self.advance_time_and_run(14)
+        del self.log[:]
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertNotIn("ball_save_start_save_saving_ball", self.events())
+        self.assertEqual(2, self.machine.game.player.ball)
+
+    def test_early_save(self):
+        self.launch()
+        self.advance_time_and_run(2)
+        del self.log[:]
+        self.hit("s_right_outlane")
+        saves = [a for n, a in self.log if n == "ball_save_start_save_saving_ball"]
+        self.assertEqual([True], [a["early_save"] for a in saves])
+
+
+class TestPolishMultiballSave(PolishMachine):
+    """build/polishing.md: the multiball's hurry-up and grace period."""
+
+    def test_multiball(self):
+        self.launch()
+        self.advance_time_and_run(15)
+        self.hit("s_scoop")
+        start = self.machine.clock.get_time() - .1
+        times = {}
+        for name in ("multiball_main_mb_hurry_up", "multiball_main_mb_grace_period"):
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: times.setdefault(name, self.machine.clock.get_time() - start))
+        for _ in range(23):
+            self.advance_time_and_run(.5)
+            if _ % 4 == 0:
+                self.hit("s_target")  # keep ball search away
+        del self.log[:]
+        self.assertAlmostEqual(7, times["multiball_main_mb_hurry_up"], delta=.6)
+        self.assertAlmostEqual(10, times["multiball_main_mb_grace_period"], delta=.6)
+        self.drain_one_ball()  # 11.5 s in
+        self.advance_time_and_run(4)
+        self.assertIn("multiball_main_mb_shoot_again", self.events())
+        self.assertEqual(2, self.machine.game.balls_in_play)
+        self.advance_time_and_run(4)
+        self.drain_one_ball()
+        self.advance_time_and_run(3)
+        self.assertEqual(["multiball_main_mb_ended"], [e for e in self.events() if e.startswith("multiball")])
+
+
+class TestPolishBallSearch(PolishMachine):
+    """build/polishing.md: ball search is on, stops on a switch, and waits for a cradled ball."""
+
+    def test_search(self):
+        self.advance_time_and_run(20)  # ball in the plunger lane: no search
+        self.assertNotIn("ball_search_started", self.events())
+        self.launch()
+        self.advance_time_and_run(16)
+        self.assertIn("ball_search_started", self.events())
+        self.hit("s_target")
+        self.assertEqual(["ball_search_stopped"], self.events())
+        self.machine.switch_controller.process_switch("s_left_flipper", 1)
+        self.advance_time_and_run(30)
+        self.assertEqual(["flipper_cradle"], self.events())
+        self.machine.switch_controller.process_switch("s_left_flipper", 0)
+        self.advance_time_and_run(14)
+        self.assertNotIn("ball_search_started", self.events())
+        self.advance_time_and_run(2)
+        self.assertIn("ball_search_started", self.events())
+
+
 if __name__ == "__main__":
     unittest.main()
