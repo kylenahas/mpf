@@ -1,6 +1,7 @@
 ---
 title: "End-of-ball bonus"
 weight: 1
+aliases: ["/examples/end-of-ball-bonus/"]
 summary: "Count shots during the ball, raise a bonus multiplier by completing three rollover lanes, and count it all up when the ball drains."
 verified: "MPF 0.82.0.dev0, smart virtual platform"
 ---

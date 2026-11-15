@@ -1,6 +1,7 @@
 ---
 title: "Missions and a wizard mode"
-weight: 3
+weight: 1
+aliases: ["/examples/mission-ladder/"]
 summary: "Pick a mission with the slingshot, start it at the scoop, finish it against a clock; finishing every mission starts a wizard mode."
 verified: "MPF 0.82.0.dev0, smart virtual platform"
 ---

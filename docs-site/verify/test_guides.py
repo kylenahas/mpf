@@ -19,6 +19,7 @@ from ruamel.yaml import YAML
 from mpf.commands.init import Command as InitCommand
 from mpf.file_interfaces.yaml_interface import YamlInterface
 from mpf.tests.MpfGameTestCase import MpfGameTestCase
+from mpf.tests.MpfTestCase import expect_startup_error
 
 CONTENT = Path(__file__).resolve().parent.parent / "content"
 FENCE = re.compile(r"^```yaml\s*\n(.*?)^```", re.M | re.S)
@@ -1466,11 +1467,11 @@ class ExampleMachine(GuideMachine):
         return sorted(m.name for m in self.machine.mode_controller.active_modes if m.name not in ("game", "base"))
 
 
-BONUS_PAGE = "examples/end-of-ball-bonus.md"
+BONUS_PAGE = "examples/scoring/end-of-ball-bonus.md"
 
 
 class TestExampleBonus(ExampleMachine):
-    """examples/end-of-ball-bonus.md"""
+    """examples/scoring/end-of-ball-bonus.md"""
 
     @classmethod
     def setUpClass(cls):
@@ -1563,7 +1564,7 @@ class TestExampleBonusWithoutInitialMultiplier(ExampleMachine):
             self.assertEqual(expected, self.machine.game.player.bonus_multiplier)
 
 
-JACKPOTS_PAGE = "examples/multiball-jackpots.md"
+JACKPOTS_PAGE = "examples/multiball/multiball-jackpots.md"
 
 
 class JackpotsMachine(ExampleMachine):
@@ -1582,7 +1583,7 @@ class JackpotsMachine(ExampleMachine):
 
 
 class TestExampleJackpots(JackpotsMachine):
-    """examples/multiball-jackpots.md"""
+    """examples/multiball/multiball-jackpots.md"""
 
     @classmethod
     def setUpClass(cls):
@@ -1653,7 +1654,7 @@ class TestExampleJackpotsCounterNotDisabled(JackpotsMachine):
         self.assertEqual(2, self.machine.game.balls_in_play)
 
 
-MISSIONS_PAGE = "examples/mission-ladder.md"
+MISSIONS_PAGE = "examples/game-flow/mission-ladder.md"
 
 
 class MissionsMachine(ExampleMachine):
@@ -1666,7 +1667,7 @@ class MissionsMachine(ExampleMachine):
 
 
 class TestExampleMissions(MissionsMachine):
-    """examples/mission-ladder.md"""
+    """examples/game-flow/mission-ladder.md"""
 
     @classmethod
     def setUpClass(cls):
@@ -1869,6 +1870,365 @@ class TestEventLowercaseTrue(GuideMachine):
         with self.assertRaisesRegex(Exception, "Placeholder use Python syntax"):
             self.start_game()
             self.advance_time_and_run(1)
+
+
+KICKBACK_PAGE = "examples/ball-in-play/ball-save-and-kickback.md"
+
+
+class KickbackMachine(ExampleMachine):
+    WATCH = ("ball_started", "ball_save_start_save_saving_ball", "ball_save_start_save_timer_start",
+             "kickback_left_kickback_fired", "kickback_targets_lit_complete")
+
+    def begin(self):
+        self.log = []
+        for name in self.WATCH:
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: self.log.append((name, kwargs.get("early_save"))), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+
+    def state(self):
+        game = self.machine.game
+        events = [n for n, a in self.log]
+        del self.log[:]
+        return (game.player.score, game.player.ball, self.machine.kickbacks["left_kickback"]._enabled, events)
+
+    def targets(self, *numbers):
+        for number in numbers:
+            self.hit("s_kick_target_%d" % number)
+
+
+class TestExampleKickback(KickbackMachine):
+    """examples/ball-in-play/ball-save-and-kickback.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(KICKBACK_PAGE)
+
+    def test_walkthrough(self):
+        self.begin()
+        self.assertEqual((0, 1, False, ["ball_started", "ball_save_start_save_timer_start"]), self.state())
+        self.targets(1, 1, 2)
+        lit = [s.state_name for s in self.machine.shot_groups["kickback_targets"].config["shots"]]
+        self.assertEqual(["lit", "lit", "unlit"], lit)
+        self.assertEqual((3000, 1, False, []), self.state())
+        self.targets(3)
+        self.assertEqual((29000, 1, True, ["kickback_targets_lit_complete"]), self.state())
+        self.assertEqual(["unlit"] * 3,
+                         [s.state_name for s in self.machine.shot_groups["kickback_targets"].config["shots"]])
+        self.hit("s_left_outlane")
+        self.advance_time_and_run(1)
+        self.assertEqual((34000, 1, False, ["kickback_left_kickback_fired"]), self.state())
+        self.hit("s_left_outlane")
+        self.assertEqual((39000, 1, False, []), self.state())
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertEqual((39000, 1, False, ["ball_save_start_save_saving_ball"]), self.state())
+        self.advance_time_and_run(20)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertEqual((39000, 2, False, ["ball_started", "ball_save_start_save_timer_start"]), self.state())
+        self.hit("s_right_outlane")
+        self.assertIn(("ball_save_start_save_saving_ball", True), self.log)
+        self.assertEqual((44000, 2, False, ["ball_save_start_save_saving_ball"]), self.state())
+        self.advance_time_and_run(3)
+        self.assertEqual((2, 1), (self.machine.playfield.balls, self.machine.game.balls_in_play))
+        self.drain_one_ball()
+        self.advance_time_and_run(3)
+        self.assertEqual((44000, 2, False, []), self.state())
+        self.targets(1, 2, 3)
+        self.assertEqual((72000, 2, True, ["kickback_targets_lit_complete"]), self.state())
+        self.advance_time_and_run(20)
+        self.drain_one_ball()
+        self.advance_time_and_run(3)
+        self.assertEqual((72000, 3, False, ["ball_started", "ball_save_start_save_timer_start"]), self.state())
+        self.hit("s_left_outlane")
+        self.assertEqual((77000, 3, False, []), self.state())
+
+
+class TestExampleKickbackBothOutlanesEarly(KickbackMachine):
+    """The page's note: early-saving the kickback's outlane too puts a second ball on the playfield."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(KICKBACK_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace(
+                "early_ball_save_events: s_right_outlane_active\n",
+                "early_ball_save_events: s_left_outlane_active, s_right_outlane_active\n", 1)})
+
+    def test_two_balls(self):
+        self.begin()
+        self.targets(1, 2, 3)
+        self.state()
+        self.hit("s_left_outlane")
+        self.advance_time_and_run(3)
+        events = self.state()[3]
+        self.assertIn("kickback_left_kickback_fired", events)
+        self.assertIn("ball_save_start_save_saving_ball", events)
+        self.assertEqual((2, 1), (self.machine.playfield.balls, self.machine.game.balls_in_play))
+
+
+class TestExampleKickbackPlayfieldActiveTag(GuideMachine):
+    """The page's note: a kickback switch with the playfield_active tag stops MPF with CFE-kickback-1."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(KICKBACK_PAGE, config_change=lambda c: c.replace(
+            "  s_left_outlane:\n    number:\n", "  s_left_outlane:\n    number:\n    tags: playfield_active\n", 1))
+
+    @expect_startup_error()
+    def test_refused(self):
+        self.assertRegex(str(self.startup_error), "CFE-kickback-1")
+
+
+DROPS_PAGE = "examples/ball-in-play/drop-targets-extra-ball.md"
+
+
+class DropsMachine(ExampleMachine):
+    WATCH = ("ball_started", "drop_target_bank_main_bank_down", "drop_target_bank_main_bank_up",
+             "drop_target_bank_main_bank_mixed", "light_bank_extra_ball", "extra_ball_group_main_lit_awarded",
+             "extra_ball_group_main_lit", "extra_ball_awarded")
+
+    def begin(self):
+        self.log = []
+        for name in self.WATCH:
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: self.log.append((name, kwargs.get("is_extra_ball"))), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        del self.log[:]
+
+    def drop(self, *names):
+        for name in names:
+            self.hit_switch_and_run("s_dt_" + name, .1)
+
+    def clear(self):
+        self.drop("left", "center", "right")
+        self.advance_time_and_run(2)
+
+    def drain(self):
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+
+    def state(self):
+        player = self.machine.game.player
+        events = [n for n, a in self.log]
+        del self.log[:]
+        return player.score, player.ball, player.bank_value, events
+
+
+class TestExampleDropTargets(DropsMachine):
+    """examples/ball-in-play/drop-targets-extra-ball.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(DROPS_PAGE)
+
+    def test_walkthrough(self):
+        self.begin()
+        bank = self.machine.drop_target_banks["main_bank"]
+        self.drop("left", "center")
+        self.assertEqual((1000, 1, 5000, ["drop_target_bank_main_bank_mixed"] * 2), self.state())
+        self.drop("right")
+        self.assertEqual((6500, 1, 10000, ["drop_target_bank_main_bank_down"]), self.state())
+        self.assertEqual(3, bank.down)
+        self.advance_time_and_run(2)
+        self.assertEqual((6500, 1, 10000, ["drop_target_bank_main_bank_up"]), self.state())
+        self.assertEqual(0, bank.down)
+        self.clear()
+        self.assertEqual((18000, 1, 15000), self.state()[:3])
+        self.drop("left")
+        self.drain()
+        self.assertEqual((18500, 2, 15000, ["drop_target_bank_main_bank_mixed", "ball_started",
+                                            "drop_target_bank_main_bank_up"]), self.state())
+        self.assertEqual(0, bank.down)
+        self.hit("s_scoop")
+        self.assertEqual((18500, 2, 15000, []), self.state())
+        self.clear()
+        score, ball, value, events = self.state()
+        self.assertEqual((35000, 2, 20000), (score, ball, value))
+        self.assertEqual(["light_bank_extra_ball", "extra_ball_group_main_lit_awarded", "extra_ball_group_main_lit"],
+                         [e for e in events if "extra" in e])
+        self.drain()
+        self.assertEqual((35000, 3, 20000, ["ball_started", "extra_ball_group_main_lit"]), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((35000, 3, 20000, ["extra_ball_awarded"]), self.state())
+        self.assertEqual(1, self.machine.game.player.extra_balls)
+        self.drain()
+        self.assertIn(("ball_started", True), self.log)
+        self.assertEqual((35000, 3, 20000, ["ball_started"]), self.state())
+        self.clear()
+        score, ball, value, events = self.state()
+        self.assertEqual((56500, 3, 25000), (score, ball, value))
+        self.assertEqual([], [e for e in events if "extra" in e])
+
+
+class TestExampleDropTargetsValueOnUp(DropsMachine):
+    """The page's note: raising the value on _up also raises it when the bank resets at the start of a ball."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(DROPS_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace(
+                "    score: current_player.bank_value\n    bank_value: 5000\n",
+                "    score: current_player.bank_value\n  drop_target_bank_main_bank_up:\n    bank_value: 5000\n", 1)})
+
+    def test_raised_without_a_clear(self):
+        self.begin()
+        self.clear()
+        self.clear()
+        self.assertEqual(15000, self.machine.game.player.bank_value)
+        self.drop("left")
+        self.drain()
+        self.assertEqual(20000, self.machine.game.player.bank_value)
+
+
+class TestExampleDropTargetPlayfieldActiveTag(GuideMachine):
+    """The page: a drop target switch with the playfield_active tag stops MPF with CFE-drop_target-1."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(DROPS_PAGE, config_change=lambda c: c.replace(
+            "    tags: drop_target\n", "    tags: drop_target, playfield_active\n", 1))
+
+    @expect_startup_error()
+    def test_refused(self):
+        self.assertRegex(str(self.startup_error), "CFE-drop_target-1")
+
+
+COMBOS_PAGE = "examples/scoring/combos.md"
+
+
+class TestExampleCombos(ExampleMachine):
+    """examples/scoring/combos.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(COMBOS_PAGE)
+
+    def state(self):
+        player = self.machine.game.player
+        events = list(self.log)
+        del self.log[:]
+        return player.score, player.vars.get("combo_count"), events
+
+    def test_walkthrough(self):
+        self.log = []
+        for name in ("mode_combo_started", "timer_combo_window_complete", "mode_combo_stopped"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.hit("s_left_ramp")
+        self.assertEqual((1000, 0, ["mode_combo_started"]), self.state())
+        self.advance_time_and_run(2)
+        self.hit("s_right_ramp")
+        self.assertEqual((12000, 1, []), self.state())
+        self.advance_time_and_run(3)
+        self.hit("s_orbit")
+        self.assertEqual((33000, 2, []), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_target")
+        self.assertEqual((33100, 2, []), self.state())
+        self.advance_time_and_run(2)
+        self.hit("s_left_ramp")
+        self.assertEqual((64100, 3, []), self.state())
+        self.advance_time_and_run(3.8)  # 3.9 s after the shot: still open; 4.3 s: closed
+        self.assertModeRunning("combo")
+        self.advance_time_and_run(.4)
+        self.assertModeNotRunning("combo")
+        self.assertEqual((64100, 3, ["timer_combo_window_complete", "mode_combo_stopped"]), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_right_ramp")
+        self.assertEqual((65100, 0, ["mode_combo_started"]), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_right_ramp")
+        self.assertEqual((76100, 1, []), self.state())
+
+
+class TestExampleCombosStartEventInVariablePlayer(ExampleMachine):
+    """The page: a variable_player entry on the mode's own start event stops MPF at the first major shot."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(COMBOS_PAGE, file_changes={
+            "modes/combo/config/combo.yaml": lambda t: t.replace(
+                "  sw_major_shot_active:\n    combo_count: 1\n", "  sw_major_shot:\n    combo_count: 1\n", 1)})
+
+    def test_refused(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        message = ('combo mode\'s variable_player: section contains a "sw_major_shot:" event which is also in the '
+                   'start_events: for the combo mode. Change the variable_player: sw_major_shot: event name to '
+                   '"mode_combo_started:"')
+        self.assertIn(message, (CONTENT / COMBOS_PAGE).read_text(encoding="utf-8"))
+        with self.assertRaises(Exception) as caught:
+            self.hit("s_left_ramp")
+        self.assertIn(message, str(caught.exception))
+
+
+HURRY_PAGE = "examples/scoring/hurry-up.md"
+
+
+class TestExampleHurryUp(ExampleMachine):
+    """examples/scoring/hurry-up.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(HURRY_PAGE)
+
+    def state(self):
+        player = self.machine.game.player
+        events = list(self.log)
+        del self.log[:]
+        return player.score, player.vars.get("hurry_up_value"), events
+
+    def test_walkthrough(self):
+        self.log = []
+        ticks = []
+        self.machine.events.add_handler("timer_hurry_up_clock_tick",
+                                        lambda **kwargs: ticks.append(kwargs["ticks"]), priority=-9)
+        for name in ("mode_hurry_up_started", "mode_hurry_up_stopped", "timer_hurry_up_clock_complete",
+                     "hurry_up_collected"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.hit("s_scoop")
+        self.assertEqual((500, 200000, ["mode_hurry_up_started"]), self.state())
+        self.assertEqual([0], ticks)  # the tick posted when the timer starts
+        self.advance_time_and_run(2.3)
+        self.assertEqual((500, 180000, []), self.state())
+        self.hit("s_scoop")
+        self.assertEqual((1000, 175000, []), self.state())
+        self.advance_time_and_run(1.5)
+        self.hit("s_right_ramp")
+        self.assertEqual((162000, 160000, ["hurry_up_collected", "mode_hurry_up_stopped"]), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_right_ramp")
+        self.assertEqual((163000, 160000, []), self.state())
+        del ticks[:]
+        self.hit("s_scoop")
+        self.assertEqual((163500, 200000, ["mode_hurry_up_started"]), self.state())
+        self.advance_time_and_run(14.7)
+        self.assertEqual((163500, 55000, []), self.state())
+        self.advance_time_and_run(.5)
+        self.assertEqual((163500, 55000, ["timer_hurry_up_clock_complete", "mode_hurry_up_stopped"]), self.state())
+        self.assertEqual(list(range(0, 30)), ticks)  # no tick for step 30
+        self.hit("s_right_ramp")
+        self.assertEqual((164500, 55000, []), self.state())
+        self.hit("s_scoop")
+        self.advance_time_and_run(3)
+        self.assertEqual((165000, 170000, ["mode_hurry_up_started"]), self.state())
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertEqual(2, self.machine.game.player.ball)
+        self.assertEqual((165000, 165000, ["mode_hurry_up_stopped"]), self.state())
+        self.hit("s_right_ramp")
+        self.assertEqual((166000, 165000, []), self.state())
 
 
 if __name__ == "__main__":

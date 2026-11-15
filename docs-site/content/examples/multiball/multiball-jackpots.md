@@ -1,6 +1,7 @@
 ---
 title: "Multiball with jackpots"
-weight: 2
+weight: 1
+aliases: ["/examples/multiball-jackpots/"]
 summary: "Three targets start a two-ball multiball; the ramps light jackpots, both ramps light a super jackpot, and targets raise the value."
 verified: "MPF 0.82.0.dev0, smart virtual platform"
 ---

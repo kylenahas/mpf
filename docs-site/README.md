@@ -106,11 +106,19 @@ Done:
   master_volume, ducking, stop); test_gmc.py generates tone WAVs and the probe reports each bus's sounds and volume.
   carousel (Carousel mode settings and events, MPFCarousel child names, wrap_items, misnamed child warning; conditional
   items and block_events cited from MPF's test_CarouselMode.py); the probe reports which carousel child is shown.
-- Examples (section weight 4; Reference is 5, For developers 6): end-of-ball-bonus (built-in bonus mode, rollover lanes raising a capped
-  multiplier, flipper_cancel hurry-up), multiball-jackpots (counter-started multiball, jackpot mode tied to it,
-  super jackpot, growing value), mission-ladder (achievements + group, mission modes with counters and timers,
-  wizard with |block). Generic rule patterns, not copies of any specific game. Each verified with the variants the
-  page describes.
+  events (MPFEventHandler, add_event_handler, slide_player action: method, send_event_with_args and the local
+  bounceback, [keyboard]); the probe prints plain labels and can simulate the L key on `doc_key`.
+  displays (own window.tscn, two MPFDisplays, target, pixelate filter, window settings from code, spawn_mpf; exporting
+  and MPFDMDDisplay not run: no export templates / DMD hardware); the probe reports each display's top slide.
+- Examples (section weight 4; Reference is 5, For developers 6), in group folders so the sidebar stays short (old
+  addresses have Hugo aliases): scoring/ end-of-ball-bonus (built-in bonus mode, rollover lanes raising a capped
+  multiplier, flipper_cancel hurry-up), combos (tag events, combo-window mode, restarted timer), hurry-up (timer ticks
+  lowering a player var, event_player stop); multiball/ multiball-jackpots (counter-started multiball, jackpot mode
+  tied to it, super jackpot, growing value); ball-in-play/ ball-save-and-kickback (ball save with early save,
+  kickback lit by a shot group), drop-targets-extra-ball (bank, growing value, persist_state counter, extra ball);
+  game-flow/ mission-ladder (achievements + group, mission modes with counters and timers, wizard with |block).
+  Generic rule patterns, not copies of any specific game. Each verified with the variants the page describes.
+  Planned next: lock-based multiball, super pops, playfield multiplier, tilt, high score and match, multiplayer.
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
   boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
@@ -142,6 +150,8 @@ Findings from running GMC 1.0.0 with MPF (already reflected in the GMC pages):
 - GMC bug: `events_when_stopped` misfires when another sound follows on the same channel (posted twice with a
   `disconnect` script error; or, when both sounds set it, the second is lost). Expected failure:
   `test_events_when_stopped_once`.
+- On Windows GMC's spawn_mpf process check runs `find <pid>` (`GMCProcess._check_mpf`), logging `Unknown process
+  status 'FIND: Parameter format not correct'`; MPF runs fine, but the retry-on-failed-start can't work there.
 - GMC ignores `sound_player` `volume`, `pan`, `delay`, `priority`, `block`, `about_to_finish_time`,
   `events_when_looping` and `events_when_about_to_finish`.
 - An `MPFVariable` format string refreshes only when the variable in Variable Name changes; Comma Separate doesn't
@@ -192,6 +202,14 @@ Findings from running MPF (already reflected in the pages):
   the group is unlimited unless the group has `max_per_game` (the `ExtraBall.light` docstring says lighting counts).
 - MPF bug: `ExtraBallGroup.award` sets player var `extra_ball_group_{}_num_lit` (missing `.format`), posting
   `player_extra_ball_group_{}_num_lit`.
+- Kickback and drop target switches can't have the `playfield_active` tag (`CFE-kickback-1`, `CFE-drop_target-1`).
+- An early ball save on an outlane with a lit kickback both kicks the ball back and serves a new one: 2 balls on the
+  playfield in a one-ball game.
+- A drop target bank posts `_up` when it resets at ball start with a target down, not only after a clear.
+- `variable_player` entries under one event run in the order written (score before or after an increase).
+- A tagged switch posts `sw_<tag>` then `sw_<tag>_active`; a mode can start on the first and score on the second (a
+  player on the mode's own start event is refused). The starting hit isn't seen by the new mode.
+- A timer posts `_tick` with `ticks: 0` on start, and the step reaching `end_value` posts only `_complete` (no tick).
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.

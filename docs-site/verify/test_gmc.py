@@ -272,6 +272,18 @@ func _ready() -> void:
 func _on_status(status) -> void:
 \tif status == MPF.server.ServerStatus.CONNECTED:
 \t\tMPF.server.add_event_handler("doc_shot", self._shot)
+\t\tMPF.server.add_event_handler("doc_key", self._key)
+
+# Simulate pressing and releasing the L key in the GMC window.
+func _key(_message = null) -> void:
+\tfor pressed in [true, false]:
+\t\tvar ev := InputEventKey.new()
+\t\tev.keycode = KEY_L
+\t\tev.physical_keycode = KEY_L
+\t\tev.key_label = KEY_L
+\t\tev.pressed = pressed
+\t\tInput.parse_input_event(ev)
+\t\tawait get_tree().create_timer(0.1).timeout
 
 func _shot(_message = null) -> void:
 \tcount += 1
@@ -280,6 +292,8 @@ func _shot(_message = null) -> void:
 \tfor node in get_tree().root.find_children("*", "Label", true, false):
 \t\tif node is MPFVariable and node.is_visible_in_tree():
 \t\t\tprint("DOC_TEXT %d %s=%s" % [count, node.name, node.text])
+\t\telif node.is_visible_in_tree():
+\t\t\tprint("DOC_LABEL %d %s=%s" % [count, node.name, node.text])
 \tfor node in get_tree().root.find_children("*", "Control", true, false):
 \t\tif node is MPFWidget:
 \t\t\tprint("DOC_WIDGET %d %s on %s" % [count, node.key, node.get_parent().get_parent().name])
@@ -290,6 +304,13 @@ func _shot(_message = null) -> void:
 \t\t\t\tif c.visible:
 \t\t\t\t\tshown.append(str(c.name))
 \t\t\tprint("DOC_CAROUSEL %d %s=%s" % [count, node.carousel_name, ",".join(shown)])
+\tfor node in get_tree().root.find_children("*", "Control", true, false):
+\t\tif node is MPFDisplay:
+\t\t\tvar top = node.get_slide()
+\t\t\tprint("DOC_DISPLAY %d %s=%s" % [count, node.name, top.key if top else ""])
+\t\telif node.name == "filters" and node.get_parent() is MPFWindow:
+\t\t\tfor f in node.get_children():
+\t\t\t\tprint("DOC_FILTER %d %s=%s" % [count, f.name, f.is_visible_in_tree()])
 \tfor bus_name in MPF.media.sound.buses:
 \t\tvar idx := AudioServer.get_bus_index(bus_name)
 \t\tprint("DOC_BUS %d %s %.2f" % [count, bus_name, db_to_linear(AudioServer.get_bus_volume_db(idx))])
@@ -793,6 +814,179 @@ class TestCarousel(unittest.TestCase):
         self.assertEqual(["extra_points", "light_lock", "double_scoring", "light_lock", "extra_points"], items)
         self.assertIn("Carousel could not find a child named 'double_scoring' to highlight.", text)
         self.assertEqual("", shown[3]["award_select"])      # nothing shown for the misnamed item
+
+
+EVENTS_PAGE = "gmc/events.md"
+
+EVENTS_SCRIPT = """
+event_player:
+  s_doc_shot_active: doc_shot
+  s_doc_key_active: doc_key
+
+switch_player:
+  start_event: mode_attract_started
+  steps:
+    - {time: 1s, switch: s_start, action: hit}
+    - {time: 1500ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_doc_key, action: hit}
+    - {time: 600ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_ramp, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_target, action: hit}
+    - {time: 300ms, switch: s_doc_shot, action: hit}
+    - {time: 1200ms, switch: s_doc_shot, action: hit}
+    - {time: 2500ms, switch: s_doc_shot, action: hit}
+"""
+
+
+def plain_labels(text):
+    """{probe number: {label name: text}} from the probe's DOC_LABEL lines (labels that aren't MPFVariables)."""
+    shots = {}
+    for n, name, value in re.findall(r"^DOC_LABEL (\d+) (\w+)=(.*?)\r?$", text, re.M):
+        shots.setdefault(int(n), {})[name] = value
+    return shots
+
+
+@unittest.skipUnless(GODOT and GMC, "set MPF_DOCS_GODOT and MPF_DOCS_GMC to run the GMC checks")
+class TestEvents(unittest.TestCase):
+    """gmc/events.md: the page's machine, scripts and slides; a key press is simulated in Godot."""
+
+    def test_page_machine(self):
+        files = page_files(INSTALL_PAGE)
+        page = page_files(EVENTS_PAGE)
+        self.assertEqual({"slides/jackpot_label.gd", "slides/mystery.gd", "gmc.cfg", "config/config.yaml",
+                          "modes/base/config/base.yaml", "slides/done_label.gd", "slides/base.tscn",
+                          "slides/mystery.tscn"}, set(page))
+        files.update(page)
+        files["gmc.cfg"] = with_godot_path(files["gmc.cfg"])
+        files["config/config.yaml"] = files["config/config.yaml"].replace(
+            "switches:\n", "switches:\n  s_doc_key:\n    number:\n", 1)
+        files = with_probe(files, EVENTS_SCRIPT)
+        run = BothRun(build_project(files), platform="-X")
+        try:
+            self.assertTrue(run.wait_for("DOC_DONE 6", 60), run.text()[-3000:])
+            text = run.text()
+            events = run.events()
+        finally:
+            run.stop()
+        self.assertNotIn("SCRIPT ERROR", text)
+        labels, variables = plain_labels(text), label_texts(text)
+        names = [n for t, n, a in events]
+        # keyboard: L -> s_lock -> jackpot_lit with its argument -> the MPFEventHandler label
+        self.assertLess(names.index("s_lock_active"), names.index("jackpot_lit"))
+        self.assertEqual("JACKPOT LIT: 25000", labels[2]["Jackpot"])
+        self.assertEqual("MYSTERY", labels[3]["Result"])
+        self.assertEqual("SPINNING...", labels[4]["Result"])   # action: method
+        self.assertEqual("MYSTERY: 5000", labels[5]["Result"])
+        # Godot -> MPF: mystery_done with its argument, one second after the target, scored at once
+        target = [t for t, n, a in events if n == "s_target_active"][0]
+        done = [(t, a) for t, n, a in events if n == "mystery_done"]
+        self.assertEqual(1, len(done))
+        self.assertIn("'points': 5000", done[0][1])
+        self.assertIn("'_from_bcp': True", done[0][1])
+        self.assertAlmostEqual(1.0, done[0][0] - target, delta=0.2)
+        self.assertEqual("5,000", variables[6]["Score"])
+        # Godot's own handler for the event it sent ran once
+        self.assertEqual("MYSTERY DONE x1: 5000", labels[6]["Done"])
+
+
+DISPLAYS_PAGE = "gmc/displays.md"
+
+DISPLAYS_SCRIPT = """
+event_player:
+  s_doc_shot_active: doc_shot
+
+switch_player:
+  start_event: mode_attract_started
+  steps:
+    - {time: 1s, switch: s_doc_shot, action: hit}
+    - {time: 100ms, switch: s_start, action: hit}
+    - {time: 1500ms, switch: s_doc_shot, action: hit}
+"""
+
+
+def probe_values(text, kind):
+    """{probe number: {name: value}} from the probe's DOC_<kind> lines."""
+    shots = {}
+    for n, name, value in re.findall(r"^DOC_%s (\d+) (\w+)=(.*?)\r?$" % kind, text, re.M):
+        shots.setdefault(int(n), {})[name] = value
+    return shots
+
+
+@unittest.skipUnless(GODOT and GMC, "set MPF_DOCS_GODOT and MPF_DOCS_GMC to run the GMC checks")
+class TestDisplays(unittest.TestCase):
+    """gmc/displays.md: the page's window with two displays, the filter, and spawn_mpf."""
+
+    def files(self, change=None):
+        files = page_files(INSTALL_PAGE)
+        files["gmc.cfg"] = with_godot_path(files["gmc.cfg"])
+        slides = page_files(SLIDES_PAGE)
+        files["slides/base.tscn"] = slides["slides/base.tscn"]
+        files["config/config.yaml"] = slides["config/config.yaml"].replace("  - base\n  - skillshot\n", "  - base\n")
+        page = page_files(DISPLAYS_PAGE)
+        self.assertEqual({"project.godot", "window.tscn", "slides/info_bar.tscn", "modes/base/config/base.yaml"},
+                         set(page))
+        files.update(page)
+        files = with_probe(files, DISPLAYS_SCRIPT)
+        if change:
+            change(files)
+        return files
+
+    def run_both(self, files):
+        run = BothRun(build_project(files), platform="-X")
+        try:
+            self.assertTrue(run.wait_for("DOC_DONE 2", 60), run.text()[-3000:])
+            text = run.text()
+        finally:
+            run.stop()
+        self.assertNotIn("SCRIPT ERROR", text)
+        return text
+
+    def test_two_displays(self):
+        text = self.run_both(self.files())
+        displays = probe_values(text, "DISPLAY")
+        self.assertEqual({"main": "attract", "info": ""}, displays[1])
+        self.assertEqual({"main": "base", "info": "info_bar"}, displays[2])
+        self.assertEqual("INFO DISPLAY: BALL 1", label_texts(text)[2]["Ball"])
+        self.assertEqual({"pixelate": "false"}, probe_values(text, "FILTER")[2])   # no [filter] section
+
+    def test_pixelate_filter(self):
+        def change(files):
+            files["gmc.cfg"] += '\n[filter]\nfilter="pixelate"\ncolumns=96.0\nrows=72.0\n'
+        text = self.run_both(self.files(change))
+        self.assertEqual({"pixelate": "true"}, probe_values(text, "FILTER")[2])
+
+    def test_spawn_mpf(self):
+        def change(files):
+            files["gmc.cfg"] += ('\n[mpf]\nspawn_mpf=true\nexecutable_path="%s"\nmpf_args="-X"\n'
+                                 % MPF_CMD.replace("\\", "/"))
+        path = build_project(self.files(change))
+        godot_log = godot_user_dir(path.name) / "logs" / "godot.log"
+        godot = subprocess.Popen([GODOT, "--path", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            end = time.time() + 60
+            text = ""
+            while time.time() < end and "DOC_DONE 2" not in text:
+                time.sleep(.5)
+                text = godot_log.read_text(encoding="utf-8", errors="replace") if godot_log.exists() else ""
+            self.assertIn("DOC_DONE 2", text, text[-3000:])
+            children = psutil.Process(godot.pid).children(recursive=True)
+        finally:
+            godot.kill()
+        self.assertNotIn("SCRIPT ERROR", text)
+        self.assertIn("Spawning MPF process...", text)
+        executing = re.search(r"Executing (.*?) with args \[(.*?)\]", text)
+        self.assertEqual(MPF_CMD.replace("\\", "/").lower(), executing.group(1).lower())
+        args = executing.group(2).split(", ")
+        self.assertEqual(["-t", "-X", "-l"], args[1:4])
+        self.assertIn("Client connected", text)
+        self.assertEqual({"main": "base", "info": "info_bar"}, probe_values(text, "DISPLAY")[2])
+        if sys.platform == "win32":
+            self.assertIn("Unknown process status 'FIND: Parameter format not correct'", text)
+        # MPF goes when GMC does
+        self.assertTrue(children)
+        gone, alive = psutil.wait_procs(children, timeout=15)
+        self.assertEqual([], alive)
 
 
 def tearDownModule():
