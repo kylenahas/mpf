@@ -16,10 +16,10 @@ The examples are grouped by kind of rule:
 
 | Group | Examples |
 |---|---|
-| [Scoring](/examples/scoring/) | [End-of-ball bonus](/examples/scoring/end-of-ball-bonus/), [Combos](/examples/scoring/combos/), [Hurry-up](/examples/scoring/hurry-up/) |
-| [Multiball](/examples/multiball/) | [Multiball with jackpots](/examples/multiball/multiball-jackpots/) |
-| [Keeping the ball in play](/examples/ball-in-play/) | [Ball save, kickback and outlanes](/examples/ball-in-play/ball-save-and-kickback/), [Drop target bank and extra ball](/examples/ball-in-play/drop-targets-extra-ball/) |
-| [Game flow](/examples/game-flow/) | [Missions and a wizard mode](/examples/game-flow/mission-ladder/) |
+| [Scoring](/examples/scoring/) | [End-of-ball bonus](/examples/scoring/end-of-ball-bonus/), [Combos](/examples/scoring/combos/), [Hurry-up](/examples/scoring/hurry-up/), [Pop bumpers and super pops](/examples/scoring/super-pops/), [Playfield multiplier](/examples/scoring/playfield-multiplier/) |
+| [Multiball](/examples/multiball/) | [Multiball with jackpots](/examples/multiball/multiball-jackpots/), [Lock-based multiball](/examples/multiball/lock-multiball/) |
+| [Keeping the ball in play](/examples/ball-in-play/) | [Ball save, kickback and outlanes](/examples/ball-in-play/ball-save-and-kickback/), [Drop target bank and extra ball](/examples/ball-in-play/drop-targets-extra-ball/), [Tilt with warnings](/examples/ball-in-play/tilt/) |
+| [Game flow](/examples/game-flow/) | [Missions and a wizard mode](/examples/game-flow/mission-ladder/), [High scores, match and credits](/examples/game-flow/high-score-and-match/), [Multiplayer game flow](/examples/game-flow/multiplayer/) |
 
 To try one, run `mpf init` in a new folder, replace `config/config.yaml` and the mode files with the ones on the page,
 and start it with `mpf game -X`. The [switch player](/get-started/first-machine/#5-press-start-without-hardware) can

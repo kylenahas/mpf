@@ -1146,6 +1146,7 @@ class MultiballMachine(GuideMachine):
         self.hit_and_release_switch("s_target")
         self.advance_time_and_run(1)
         self.lock_ball()
+        self.lock_ball()
         self.advance_time_and_run(12)
         for _ in range(3):
             self.drain_one_ball()
@@ -1174,42 +1175,45 @@ class TestMultiball(MultiballMachine):
         self.hit_and_release_switch("s_target")
         self.advance_time_and_run(1)
         player = self.machine.game.player
-        self.assertEqual((2, 0, 1, 1, 0), self.counts())
+        self.assertEqual((3, 0, 1, 1, 0), self.counts())
         self.assertEqual(0, player.score)
         self.lock_ball()
-        self.assertEqual((1, 1, 1, 1, 1), self.counts())
+        self.assertEqual((2, 1, 1, 1, 1), self.counts())
         self.assertEventCalledWith("multiball_lock_vuk_lock_locked_ball", total_balls_locked=1)
         self.assertEqual(1000, player.score)
         self.hit_and_release_switch("s_target")
         self.advance_time_and_run(1)
         self.assertEqual(1000, player.score)
         self.lock_ball()
+        self.assertEqual((1, 2, 1, 1, 2), self.counts())
+        self.assertEventNotCalled("multiball_lock_vuk_lock_full")
+        self.lock_ball()
         self.assertEventCalled("multiball_lock_vuk_lock_full")
         self.assertEventCalledWith("multiball_main_mb_started", balls=3)
-        self.assertEqual(0, self.machine.ball_devices["bd_lock"].balls)
         self.assertEqual(3, self.machine.game.balls_in_play)
         self.assertEqual(0, self.machine.multiball_locks["vuk_lock"].locked_balls)
-        self.assertEqual(2000, player.score)
+        self.assertEqual(3000, player.score)
         self.hit_and_release_switch("s_target")
         self.advance_time_and_run(1)
-        self.assertEqual(2100, player.score)
+        self.assertEqual(3100, player.score)
         # drain inside shoot_again is replaced
         self.drain_one_ball()
         self.advance_time_and_run(4)
         self.assertEventCalled("multiball_main_mb_shoot_again")
-        self.assertEqual((0, 0, 3, 3), self.counts()[:4])
+        # all three locked balls are out, and the trough kept its ball
+        self.assertEqual((1, 0, 3, 3), self.counts()[:4])
         self.advance_time_and_run(8)
         self.assertEventCalled("multiball_main_mb_shoot_again_ended")
         # drains after the window
         self.drain_one_ball()
         self.advance_time_and_run(2)
-        self.assertEqual((1, 0, 2, 2), self.counts()[:4])
+        self.assertEqual((2, 0, 2, 2), self.counts()[:4])
         self.assertEventCalled("multiball_main_mb_ball_lost")
         self.assertEventNotCalled("multiball_main_mb_lost_ball")
         self.assertEventNotCalled("multiball_main_mb_ended")
         self.drain_one_ball()
         self.advance_time_and_run(2)
-        self.assertEqual((2, 0, 1, 1), self.counts()[:4])
+        self.assertEqual((3, 0, 1, 1), self.counts()[:4])
         self.assertEventCalled("multiball_main_mb_ended")
         self.drain_one_ball()
         self.advance_time_and_run(3)
@@ -1218,8 +1222,97 @@ class TestMultiball(MultiballMachine):
         self.hit_and_release_switch("s_target")
         self.advance_time_and_run(1)
         self.lock_ball()
-        self.assertEqual((1, 1, 1, 1, 1), self.counts())
-        self.assertEqual(3100, player.score)
+        self.assertEqual((2, 1, 1, 1, 1), self.counts())
+        self.assertEqual(4100, player.score)
+
+
+MB_REPLACE = "    balls_to_replace: 2\n"
+MB_EJECT_ALL = "    eject_all_events: multiball_main_mb_started\n"
+MB_LOCK_SWITCHES = "    ball_switches: s_lock1, s_lock2, s_lock3\n"
+MB_ONE_SWITCH = "    ball_switches: s_lock1\n"
+
+
+def mb_variant(keep_replace, keep_eject_all, one_ball_device):
+    files = {k: v for k, v in page_files(MB_PAGE).items() if k.startswith("modes/")}
+    config = full_config(MB_PAGE)
+    assert MB_REPLACE in files["modes/base/config/base.yaml"] and MB_EJECT_ALL in config
+    if not keep_replace:
+        files["modes/base/config/base.yaml"] = files["modes/base/config/base.yaml"].replace(MB_REPLACE, "")
+    if not keep_eject_all:
+        config = config.replace(MB_EJECT_ALL, "")
+    if one_ball_device:
+        config = config.replace(MB_LOCK_SWITCHES, MB_ONE_SWITCH)
+    return make_machine(config, files=files)
+
+
+class MultiballThreeLocks(MultiballMachine):
+    def three_locks(self):
+        self.mock_event("multiball_lock_vuk_lock_locked_ball")
+        self.mock_event("multiball_main_mb_started")
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        result = []
+        for _ in range(3):
+            self.lock_ball()
+            result.append(self.counts())
+        self.advance_time_and_run(4)
+        result.append(self.counts())
+        return result
+
+
+class TestMultiballWithoutReleaseSettings(MultiballThreeLocks):
+    """build/multiball.md note: without balls_to_replace and eject_all_events, one ball stays in the lock."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = mb_variant(keep_replace=False, keep_eject_all=False, one_ball_device=False)
+
+    def test_one_ball_stays(self):
+        counts = self.three_locks()
+        self.assertEqual((0, 1, 3, 3), counts[-1][:4])
+        self.advance_time_and_run(13)
+        for _ in range(3):
+            self.drain_one_ball()
+            self.advance_time_and_run(3)
+        self.assertBallNumber(2)
+        self.assertEqual(1, self.machine.ball_devices["bd_lock"].balls)
+
+
+class TestMultiballVirtualLock(MultiballThreeLocks):
+    """build/multiball.md: the lock on a one-ball device keeps no balls, and the multiball uses the trough."""
+
+    @classmethod
+    def setUpClass(cls):
+        page = (CONTENT / MB_PAGE).read_text(encoding="utf-8")
+        assert "    ball_switches: s_scoop\n" in page and "  scoop_lock:\n" in page
+        cls.machine_dir = mb_variant(keep_replace=False, keep_eject_all=False, one_ball_device=True)
+
+    def test_virtual(self):
+        counts = self.three_locks()
+        self.assertEqual([(3, 0, 1, 1, 1), (3, 0, 1, 1, 2)], counts[:2])
+        self.assertEqual(3, self._events["multiball_lock_vuk_lock_locked_ball"])
+        self.assertEventCalledWith("multiball_main_mb_started", balls=3)
+        self.assertEqual((1, 0, 3, 3), counts[-1][:4])
+
+
+class TestMultiballVirtualLockWithReplace(MultiballThreeLocks):
+    """build/multiball.md warning: balls_to_replace on a one-ball device makes MPF lose count of a ball."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = mb_variant(keep_replace=True, keep_eject_all=False, one_ball_device=True)
+
+    def test_kaboom(self):
+        message = "KABOOM! We just added a ball to bd_trough which has a capacity of 4 but already had 4 ball(s)"
+        self.assertIn(message, " ".join((CONTENT / MB_PAGE).read_text(encoding="utf-8").split()))
+        self.three_locks()
+        self.advance_time_and_run(13)
+        with self.assertRaises(AssertionError) as caught:
+            for _ in range(3):
+                self.drain_one_ball()
+                self.advance_time_and_run(3)
+        self.assertIn(message, str(caught.exception))
 
 
 class TestMultiballWithoutReset(MultiballMachine):
@@ -1232,7 +1325,7 @@ class TestMultiballWithoutReset(MultiballMachine):
     def test_lock_stays_full(self):
         self.mock_event("multiball_lock_vuk_lock_locked_ball")
         self.play_to_ball_2()
-        self.assertEqual(2, self.machine.multiball_locks["vuk_lock"].locked_balls)
+        self.assertEqual(3, self.machine.multiball_locks["vuk_lock"].locked_balls)
         before = self._events["multiball_lock_vuk_lock_locked_ball"]
         score = self.machine.game.player.score
         self.lock_ball()
@@ -2229,6 +2322,618 @@ class TestExampleHurryUp(ExampleMachine):
         self.assertEqual((165000, 165000, ["mode_hurry_up_stopped"]), self.state())
         self.hit("s_right_ramp")
         self.assertEqual((166000, 165000, []), self.state())
+
+
+LOCK_PAGE = "examples/multiball/lock-multiball.md"
+LOCK_RESET_ALL = "    reset_all_counts_events: multiball_main_mb_started\n"
+
+
+class LockMultiballMachine(ExampleMachine):
+    def vuk(self):
+        self.machine.default_platform.add_ball_to_device(self.machine.ball_devices["bd_lock"])
+        self.advance_time_and_run(5)
+
+    def lit_lock(self):
+        self.hit("s_lock_target")
+        self.vuk()
+
+    def state(self):
+        game = self.machine.game
+        player = game.player
+        events = [n for n, a in self.log]
+        del self.log[:]
+        return (player.number, player.score, self.machine.ball_devices["bd_trough"].balls,
+                self.machine.ball_devices["bd_lock"].balls, game.balls_in_play,
+                self.machine.multiball_locks["vuk_lock"].locked_balls, events)
+
+    def begin(self):
+        self.log = []
+        for name in ("multiball_lock_vuk_lock_locked_ball", "multiball_lock_vuk_lock_full", "multiball_main_mb_started",
+                     "multiball_main_mb_ball_lost", "multiball_main_mb_ended", "add_a_ball"):
+            self.machine.events.add_handler(
+                name, lambda name=name, **kwargs: self.log.append((name, kwargs)), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_two_player_game()
+        self.advance_time_and_run(3)
+
+    def player_1_locks_one_then_drains(self):
+        self.lit_lock()
+        self.hit("s_lock_target")
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+
+    def player_2_multiball_then_drains(self):
+        for _ in range(3):
+            self.lit_lock()
+        self.advance_time_and_run(10)
+        while self.machine.game.player.number == 2:
+            self.drain_one_ball()
+            self.advance_time_and_run(4)
+
+
+class TestExampleLockMultiball(LockMultiballMachine):
+    """examples/multiball/lock-multiball.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(LOCK_PAGE)
+
+    def test_walkthrough(self):
+        lock = self.machine.multiball_locks["vuk_lock"]
+        self.begin()
+        self.assertEqual((1, 0, 3, 0, 1, 0, []), self.state())
+        self.vuk()
+        self.assertEqual((1, 0, 3, 0, 1, 0, []), self.state())
+        self.hit("s_lock_target")
+        self.assertTrue(lock.enabled)
+        self.vuk()
+        self.assertEqual((1, 5000, 2, 1, 1, 1, ["multiball_lock_vuk_lock_locked_ball"]), self.state())
+        self.assertFalse(lock.enabled)
+        self.vuk()
+        self.assertEqual((1, 5000, 2, 1, 1, 1, []), self.state())
+        self.hit("s_lock_target")
+        self.assertTrue(lock.enabled)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEqual((2, 0, 2, 1, 1, 0, []), self.state())
+        self.assertFalse(lock.enabled)
+        self.lit_lock()
+        self.assertEqual((2, 5000, 2, 1, 1, 1, ["multiball_lock_vuk_lock_locked_ball"]), self.state())
+        self.lit_lock()
+        self.assertEqual((2, 10000, 1, 2, 1, 2, ["multiball_lock_vuk_lock_locked_ball"]), self.state())
+        self.lit_lock()
+        started = [a for n, a in self.log if n == "multiball_main_mb_started"]
+        self.assertEqual([3], [a["balls"] for a in started])
+        self.assertEqual((2, 15000, 1, 1, 3, 0, ["multiball_lock_vuk_lock_locked_ball", "multiball_lock_vuk_lock_full",
+                                                 "multiball_main_mb_started"]), self.state())
+        self.advance_time_and_run(4)
+        # all three balls left the VUK; the trough kept its ball
+        self.assertEqual((2, 15000, 1, 0, 3, 0, []), self.state())
+        self.hit("s_ramp")
+        self.advance_time_and_run(4)
+        self.assertEqual((2, 16000, 0, 0, 4, 0, ["add_a_ball"]), self.state())
+        self.assertEqual(4, self.machine.playfield.balls)
+        self.hit("s_ramp")
+        self.advance_time_and_run(4)
+        self.assertEqual((2, 17000, 0, 0, 4, 0, []), self.state())
+        self.advance_time_and_run(10)
+        for _ in range(3):
+            self.drain_one_ball()
+            self.advance_time_and_run(3)
+        self.assertEqual((2, 17000, 3, 0, 1, 0, ["multiball_main_mb_ball_lost"] * 3 + ["multiball_main_mb_ended"]),
+                         self.state())
+        self.drain_one_ball()
+        self.advance_time_and_run(4)
+        self.assertEqual((1, 5000, 3, 0, 1, 0, []), self.state())
+        self.assertEqual(2, self.machine.game.player.ball)
+        self.lit_lock()
+        self.assertEqual((1, 10000, 2, 1, 1, 1, ["multiball_lock_vuk_lock_locked_ball"]), self.state())
+
+
+class TestExampleLockMultiballResetCurrentPlayerOnly(LockMultiballMachine):
+    """The page's warning: resetting only the current player's count leaves player 1 a lock the VUK no longer has."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(LOCK_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace(
+                LOCK_RESET_ALL, "    reset_count_for_current_player_events: multiball_main_mb_started\n", 1)})
+
+    def test_ball_count_mismatch(self):
+        self.assertIn(LOCK_RESET_ALL, page_files(LOCK_PAGE)["modes/base/config/base.yaml"])
+        self.begin()
+        self.player_1_locks_one_then_drains()
+        self.player_2_multiball_then_drains()
+        self.assertEqual((1, 2), (self.machine.game.player.number, self.machine.game.player.ball))
+        self.assertEqual(1, self.machine.multiball_locks["vuk_lock"].locked_balls)
+        self.assertEqual(0, self.machine.ball_devices["bd_lock"].balls)
+        self.lit_lock()
+        self.lit_lock()
+        self.advance_time_and_run(6)
+        self.assertIn("multiball_main_mb_started", [n for n, a in self.log])
+        self.assertEqual((2, 0, 3), (self.machine.ball_devices["bd_trough"].balls,
+                                     self.machine.ball_devices["bd_lock"].balls, self.machine.game.balls_in_play))
+        self.assertEqual(2, self.machine.playfield.balls)
+POPS_PAGE = "examples/scoring/super-pops.md"
+
+
+class TestExampleSuperPops(ExampleMachine):
+    """examples/scoring/super-pops.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(POPS_PAGE)
+
+    def pops(self, count):
+        switches = ("s_pop_left", "s_pop_right", "s_pop_bottom")
+        for i in range(count):
+            self.hit(switches[i % 3])
+
+    def state(self):
+        player = self.machine.game.player
+        events = list(self.log)
+        del self.log[:]
+        return (player.ball, player.score, player.pop_value, self.machine.counters["pop_level"].value,
+                self.machine.counters["super_pops_count"].value, events)
+
+    def test_walkthrough(self):
+        self.log = []
+        for name in ("pop_level_up", "start_super_pops", "mode_super_pops_started", "mode_super_pops_stopped"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.pops(24)
+        self.assertEqual((1, 2400, 100, 24, 24, []), self.state())
+        self.pops(1)
+        self.assertEqual((1, 2500, 200, 0, 25, ["pop_level_up"]), self.state())
+        self.pops(1)
+        self.assertEqual((1, 2700, 200, 1, 26, []), self.state())
+        self.pops(14)
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEqual((2, 5500, 200, 15, 40, []), self.state())
+        self.pops(10)
+        self.assertEqual((2, 7500, 300, 0, 50, ["pop_level_up"]), self.state())
+        self.pops(49)
+        self.assertEqual((2, 24600, 400, 24, 99), self.state()[:5])
+        self.pops(1)
+        self.assertEqual((2, 25000, 500, 0, 0, ["pop_level_up", "start_super_pops", "mode_super_pops_started"]),
+                         self.state())
+        self.pops(1)
+        self.assertEqual((2, 26000, 500, 1, 1, []), self.state())
+        self.advance_time_and_run(19)
+        self.assertModeRunning("super_pops")
+        self.advance_time_and_run(1.5)
+        self.assertEqual((2, 26000, 500, 1, 1, ["mode_super_pops_stopped"]), self.state())
+        self.pops(1)
+        self.assertEqual((2, 26500, 500, 2, 2, []), self.state())
+
+
+class TestExampleSuperPopsPlayfieldActiveTag(GuideMachine):
+    """The page: an autofire coil's switch with the playfield_active tag stops MPF at startup."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(POPS_PAGE, config_change=lambda c: c.replace(
+            "    tags: pop\n", "    tags: pop, playfield_active\n", 1))
+
+    @expect_startup_error()
+    def test_refused(self):
+        self.assertRegex(str(self.startup_error), "CFE-autofire-1")
+
+
+MULT_PAGE = "examples/scoring/playfield-multiplier.md"
+MULT_BALL_RESET = "  mode_base_started:\n    pf_mult:\n      int: 1\n      action: set\n"
+
+
+class MultiplierMachine(ExampleMachine):
+    def begin(self):
+        self.log = []
+        for name in ("mode_multiplier_started", "mode_multiplier_stopped"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+
+    def state(self):
+        player = self.machine.game.player
+        events = list(self.log)
+        del self.log[:]
+        return player.ball, player.score, player.pf_mult, events
+
+
+class TestExamplePlayfieldMultiplier(MultiplierMachine):
+    """examples/scoring/playfield-multiplier.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(MULT_PAGE)
+
+    def test_walkthrough(self):
+        self.begin()
+        self.hit("s_ramp")
+        self.assertEqual((1, 1000, 1, []), self.state())
+        self.hit("s_mult_target")
+        self.assertEqual((1, 1000, 2, ["mode_multiplier_started"]), self.state())
+        self.hit("s_ramp")
+        self.hit("s_target")
+        self.assertEqual((1, 3200, 2, []), self.state())
+        self.advance_time_and_run(20)
+        self.hit("s_mult_target")
+        self.assertEqual((1, 3200, 3, []), self.state())
+        self.hit("s_ramp")
+        self.assertEqual((1, 6200, 3, []), self.state())
+        self.hit("s_mult_target")
+        self.assertEqual((1, 6200, 3, []), self.state())
+        self.advance_time_and_run(29)
+        self.hit("s_ramp")
+        self.assertEqual((1, 9200, 3, []), self.state())
+        self.advance_time_and_run(1.5)
+        self.assertEqual((1, 9200, 1, ["mode_multiplier_stopped"]), self.state())
+        self.hit("s_ramp")
+        self.assertEqual((1, 10200, 1, []), self.state())
+        self.hit("s_mult_target")
+        self.assertEqual((1, 10200, 2, ["mode_multiplier_started"]), self.state())
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEqual((2, 10200, 1, ["mode_multiplier_stopped"]), self.state())
+        self.hit("s_ramp")
+        self.assertEqual((2, 11200, 1, []), self.state())
+
+
+class TestExamplePlayfieldMultiplierWithoutBallReset(MultiplierMachine):
+    """The page's note: without the mode_base_started reset, a ball that drains at 2x leaves the next ball at 2x."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(MULT_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace(MULT_BALL_RESET, "", 1)})
+
+    def test_next_ball_doubled(self):
+        self.assertIn(MULT_BALL_RESET, page_files(MULT_PAGE)["modes/base/config/base.yaml"])
+        self.begin()
+        self.hit("s_mult_target")
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.hit("s_ramp")
+        self.assertEqual((2, 2000, 2), self.state()[:3])
+
+
+class TestExamplePlayfieldMultiplierMachineReset(GuideMachine):
+    """The page's note: a variable_player in the machine config can't set a player variable."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(MULT_PAGE, config_change=lambda c: c.replace(
+            "\nvirtual_platform_start_active_switches",
+            "\nvariable_player:\n  mode_multiplier_stopped:\n    pf_mult:\n      int: 1\n      action: set\n"
+            "\nvirtual_platform_start_active_switches", 1))
+
+    @expect_startup_error()
+    def test_refused(self):
+        self.assertRegex(str(self.startup_error), "Section not valid outside of game modes")
+        self.assertRegex(str(self.startup_error), "CFE-variable_player-1")
+
+
+TILT_PAGE = "examples/ball-in-play/tilt.md"
+
+
+class TiltMachine(ExampleMachine):
+    WATCH = ("tilt_warning", "tilt_warning_1", "tilt_warning_2", "tilt", "tilt_clear", "slam_tilt", "ball_started",
+             "bonus_start", "ball_ended", "game_ended")
+
+    def begin(self):
+        self.log = []
+        for name in self.WATCH:
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(
+                (name, kwargs.get("warnings_remaining"))), priority=-9)
+        self.advance_time_and_run(1)
+        self.start_two_player_game()
+        self.advance_time_and_run(3)
+        del self.log[:]
+
+    def drain(self):
+        # after a tilt, balls_in_play is 0, so drain_all_balls() would not drain anything
+        self.machine.default_platform.add_ball_to_device(self.machine.ball_devices["bd_trough"])
+
+    def events(self):
+        events = list(self.log)
+        del self.log[:]
+        return events
+
+    def state(self):
+        game = self.machine.game
+        player = game.player
+        return (player.number, player.score, player.vars.get("tilt_warnings", 0), game.tilted,
+                self.machine.flippers["left_flipper"]._enabled)
+
+
+class TestExampleTilt(TiltMachine):
+    """examples/ball-in-play/tilt.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(TILT_PAGE)
+
+    def test_walkthrough(self):
+        self.begin()
+        self.hit("s_ramp", 2)
+        self.assertEqual((1, 2000, 0, False, True), self.state())
+        self.hit("s_plumb_bob")
+        self.assertEqual([("tilt_warning", 2), ("tilt_warning_1", None)], self.events())
+        self.hit("s_plumb_bob")  # 0.1 s later: inside multiple_hit_window
+        self.assertEqual([], self.events())
+        self.assertEqual((1, 2000, 1, False, True), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.assertEqual([("tilt_warning", 1), ("tilt_warning_2", None)], self.events())
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.assertEqual([("tilt", None)], self.events())
+        self.assertEqual((1, 2000, 0, True, False), self.state())
+        self.hit("s_ramp")
+        self.assertEqual((1, 2000, 0, True, False), self.state())
+        self.advance_time_and_run(2)
+        self.hit("s_plumb_bob")
+        last_bob = self.machine.clock.get_time() - .1
+        self.drain()
+        self.advance_time_and_run(4.7)
+        self.assertEqual([], self.events())
+        self.assertEqual(1, self.machine.game.player.number)
+        self.advance_time_and_run(.5)
+        self.assertEqual(["tilt_clear", "ball_ended", "ball_started"], [n for n, a in self.events()])
+        self.assertLess(self.machine.clock.get_time() - last_bob, 5.4)
+        self.assertEqual((2, 0, 0, False, True), self.state())
+        self.advance_time_and_run(3)
+        self.hit("s_ramp")
+        self.hit("s_plumb_bob")
+        self.assertEqual((2, 1000, 1, False, True), self.state())
+        del self.log[:]
+        self.advance_time_and_run(1)
+        self.drain_all_balls()
+        self.advance_time_and_run(8)
+        self.assertIn("bonus_start", [n for n, a in self.events()])
+        player_2 = self.machine.game.player_list[1]
+        self.assertEqual((6000, 0), (player_2.score, player_2.tilt_warnings))
+        self.assertEqual((1, 2000), self.state()[:2])
+        self.assertEqual(2, self.machine.game.player.ball)
+        self.advance_time_and_run(2)
+        self.hit("s_slam_tilt")
+        self.assertEqual(["slam_tilt", "tilt"], [n for n, a in self.events()])
+        self.drain()
+        self.advance_time_and_run(1)
+        self.assertEqual(["tilt_clear", "ball_ended", "game_ended"], [n for n, a in self.events()])
+        self.assertIsNone(self.machine.game)
+        self.assertEqual(1, player_2.ball)
+
+
+class TestExampleTiltOverride(TiltMachine):
+    """The page: a modes/tilt/config/tilt.yaml with warnings_to_tilt: 2 tilts on the second hit."""
+
+    @classmethod
+    def setUpClass(cls):
+        page = (CONTENT / TILT_PAGE).read_text(encoding="utf-8")
+        block = "```yaml\n#config_version=6\n\ntilt:\n  warnings_to_tilt: 2\n```"
+        assert block in page
+        cls.machine_dir = example_machine(TILT_PAGE)
+        tilt = Path(cls.machine_dir, "modes", "tilt", "config", "tilt.yaml")
+        tilt.parent.mkdir(parents=True, exist_ok=True)
+        tilt.write_text("#config_version=6\n\ntilt:\n  warnings_to_tilt: 2\n", encoding="utf-8")
+
+    def test_second_hit_tilts(self):
+        self.begin()
+        self.hit("s_plumb_bob")
+        self.assertEqual([("tilt_warning", 1), ("tilt_warning_1", None)], self.events())
+        self.advance_time_and_run(1)
+        self.hit("s_plumb_bob")
+        self.assertEqual([("tilt", None)], self.events())
+
+
+HS_PAGE = "examples/game-flow/high-score-and-match.md"
+
+
+class HighScoreMachine(ExampleMachine):
+    ARGS = ("award", "player_num", "value", "winners", "winner_number", "match_number0", "match_number1",
+            "player_name")
+
+    def begin(self):
+        self.log = []
+        for name in ("credits_added", "game_started", "high_score_enter_initials", "high_score_award_display",
+                     "match_has_match", "match_no_match", "game_ended"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(
+                (name, {k: v for k, v in kwargs.items() if k in self.ARGS})), priority=-9)
+        self.advance_time_and_run(1)
+
+    def events(self):
+        events = list(self.log)
+        del self.log[:]
+        return events
+
+    def table(self):
+        var = self.machine.variables.get_machine_var
+        return [(var("score%d_label" % i), var("score%d_name" % i), var("score%d_value" % i)) for i in range(1, 6)]
+
+    def credits(self):
+        return self.machine.variables.get_machine_var("credits_string")
+
+    def play_game(self):
+        """Two coins, two players, three balls each: player 1 ends on 15,060, player 2 on 3,150."""
+        self.hit("s_coin", 2)
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(2)
+        for _ in range(3):
+            self.hit("s_ramp", 5)
+            self.hit("s_target", 2)
+            self.drain_all_balls()
+            self.advance_time_and_run(3)
+            self.hit("s_ramp", 1)
+            self.hit("s_target", 5)
+            self.drain_all_balls()
+            self.advance_time_and_run(3)
+
+
+class TestExampleHighScoreAndMatch(HighScoreMachine):
+    """examples/game-flow/high-score-and-match.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(HS_PAGE)
+
+    def test_walkthrough(self):
+        from unittest import mock
+        self.begin()
+        self.assertEqual([("GRAND CHAMPION", "AAA", 10000), ("HIGH SCORE 1", "BBB", 5000),
+                          ("HIGH SCORE 2", "CCC", 2000), ("HIGH SCORE 3", "DDD", 1000), (None, None, None)],
+                         self.table())
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.assertIsNone(self.machine.game)
+        self.hit("s_coin", 2)
+        self.advance_time_and_run(1)
+        self.assertEqual(("CREDITS 2", ["credits_added"] * 2), (self.credits(), [n for n, a in self.events()]))
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(2)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.assertEqual(("CREDITS 0", 2), (self.credits(), self.machine.game.num_players))
+        self.assertEqual(["game_started"], [n for n, a in self.events()])
+        for _ in range(3):
+            self.hit("s_ramp", 5)
+            self.hit("s_target", 2)
+            self.drain_all_balls()
+            self.advance_time_and_run(3)
+            self.hit("s_ramp", 1)
+            self.hit("s_target", 5)
+            self.drain_all_balls()
+            self.advance_time_and_run(3)
+        self.assertEqual([("high_score_enter_initials", {"award": "GRAND CHAMPION", "player_num": 1, "value": 15060})],
+                         self.events())
+        with mock.patch("random.randint", return_value=0), \
+                mock.patch("random.choice", side_effect=lambda seq: 50 if 50 in seq else list(seq)[0]):
+            self.machine.events.post("text_input_high_score_complete", text="ACE")
+            self.advance_time_and_run(1)
+            self.assertEqual([("high_score_award_display",
+                               {"player_name": "ACE", "award": "GRAND CHAMPION", "value": 15060, "player_num": 1})],
+                             self.events())
+            self.advance_time_and_run(4)
+            self.assertEqual([("high_score_enter_initials", {"award": "HIGH SCORE 3", "player_num": 2, "value": 3150})],
+                             self.events())
+            self.advance_time_and_run(29)
+            self.assertEqual([], self.events())
+            self.advance_time_and_run(2)
+        self.assertEqual([("match_has_match", {"winner_number": 50, "winners": 1, "match_number0": 60,
+                                               "match_number1": 50}),
+                          ("credits_added", {}), ("game_ended", {})], self.events())
+        self.assertIsNone(self.machine.game)
+        self.assertEqual("CREDITS 1", self.credits())
+        self.assertEqual(50, self.machine.variables.get_machine_var("match_number"))
+        self.assertEqual([("GRAND CHAMPION", "ACE", 15060), ("HIGH SCORE 1", "AAA", 10000),
+                          ("HIGH SCORE 2", "BBB", 5000), ("HIGH SCORE 3", "CCC", 2000), (None, None, None)],
+                         self.table())
+
+
+class TestExampleHighScoreWithoutOverwrite(HighScoreMachine):
+    """The page's warning: without _overwrite, MPF's own categories and defaults are kept and ours are added."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(HS_PAGE, file_changes={
+            "modes/high_score/config/high_score.yaml": lambda t: t.replace("    _overwrite: true\n", "")})
+
+    def test_lists_appended(self):
+        self.begin()
+        self.assertEqual(["BRI", "GHK", "JK", "QC", "MPF"], [name for label, name, value in self.table()])
+        self.play_game()
+        self.machine.events.post("text_input_high_score_complete", text="ACE")
+        self.advance_time_and_run(5)
+        self.assertEqual([("high_score_enter_initials", {"award": "HIGH SCORE 4", "player_num": 2, "value": 3150})],
+                         [e for e in self.events() if e[0] == "high_score_enter_initials"][-1:])
+
+
+MULTIPLAYER_PAGE = "examples/game-flow/multiplayer.md"
+
+
+class TestExampleMultiplayer(ExampleMachine):
+    """examples/game-flow/multiplayer.md"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(MULTIPLAYER_PAGE)
+
+    def state(self):
+        game = self.machine.game
+        total = self.machine.variables.get_machine_var("total_ramps")
+        if not game:
+            return None, total
+        player = game.player
+        lit = [s[0] for s in ("left", "center", "right")
+               if self.machine.shots["lane_" + s].state_name == "lit"]
+        return (player.number, player.ball, game.num_players, player.score, "".join(lit).upper(),
+                player.vars.get("lanes_completed"), total)
+
+    def events(self):
+        events = [n for n, a in self.log]
+        del self.log[:]
+        return events
+
+    def drain(self):
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+
+    def test_walkthrough(self):
+        self.log = []
+        for name in ("player_added", "game_started", "player_turn_started", "ball_started", "lanes_lit_complete",
+                     "game_ended"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append((name, kwargs)),
+                                            priority=-9)
+        self.advance_time_and_run(1)
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.assertEqual(["player_added", "game_started", "player_turn_started", "ball_started"], self.events())
+        for _ in range(2):
+            self.hit_and_release_switch("s_start")
+            self.advance_time_and_run(1)
+        self.assertEqual(["player_added", "player_added"], self.events())
+        self.hit("s_lane_left")
+        self.hit("s_lane_center")
+        self.hit("s_ramp")
+        self.assertEqual((1, 1, 3, 1000, "LC", None, 1), self.state())
+        self.drain()
+        self.assertEqual([("player_turn_started", 2), ("ball_started", 2)],
+                         [(n, a.get("number", a.get("player"))) for n, a in self.log])
+        del self.log[:]
+        self.assertEqual((2, 1, 3, 0, "", None, 1), self.state())
+        self.hit("s_lane_left")
+        self.hit("s_lane_center")
+        self.hit("s_lane_right")
+        self.assertEqual((2, 1, 3, 10000, "", 1, 1), self.state())
+        self.assertEqual(["lanes_lit_complete"], self.events())
+        self.hit("s_ramp", 2)
+        self.assertEqual((2, 1, 3, 12000, "", 1, 3), self.state())
+        self.drain()
+        self.hit("s_ramp")
+        self.drain()
+        self.assertEqual((1, 2, 3, 1000, "LC", None, 4), self.state())
+        del self.log[:]
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(1)
+        self.assertEqual([], self.events())
+        self.assertEqual(3, self.machine.game.num_players)
+        self.hit("s_lane_right")
+        self.assertEqual((1, 2, 3, 11000, "", 1, 4), self.state())
+        while self.machine.game:
+            self.drain()
+        self.assertEqual("game_ended", self.events()[-1])
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(2)
+        self.hit("s_ramp")
+        self.assertEqual((1, 1, 1, 1000, "", None, 5), self.state())
 
 
 if __name__ == "__main__":

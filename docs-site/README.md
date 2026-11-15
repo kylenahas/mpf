@@ -117,8 +117,10 @@ Done:
   tied to it, super jackpot, growing value); ball-in-play/ ball-save-and-kickback (ball save with early save,
   kickback lit by a shot group), drop-targets-extra-ball (bank, growing value, persist_state counter, extra ball);
   game-flow/ mission-ladder (achievements + group, mission modes with counters and timers, wizard with |block).
+  Added 2026-11-15: scoring/ super-pops, playfield-multiplier; multiball/ lock-multiball (three locks, lit lock, add-a-ball,
+  two players on one VUK); ball-in-play/ tilt (built-in tilt mode, settle time, slam tilt, settings override);
+  game-flow/ high-score-and-match (credits, high_score with _overwrite, match with credits: winners), multiplayer.
   Generic rule patterns, not copies of any specific game. Each verified with the variants the page describes.
-  Planned next: lock-based multiball, super pops, playfield multiplier, tilt, high score and match, multiplayer.
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
   boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
@@ -210,6 +212,21 @@ Findings from running MPF (already reflected in the pages):
 - A tagged switch posts `sw_<tag>` then `sw_<tag>_active`; a mode can start on the first and score on the second (a
   player on the mode's own start event is refused). The starting hit isn't seen by the new mode.
 - A timer posts `_tick` with `ticks: 0` on start, and the step reaching `end_value` posts only `_complete` (no tick).
+- Autofire switches can't have `playfield_active` either (`CFE-autofire-1`).
+- Three-lock multiball releasing all three locked balls: `balls_to_replace: 2` plus `eject_all_events` on the lock
+  device (the multiball only takes ball_count minus balls in play from locks, and counts the player's ball, which is
+  in the lock). Without them one ball stays in the lock. With a shared physical lock, reset all players' counts
+  (`reset_all_counts_events`): with per-player reset, a returning player's count outlives the balls and MPF counts 3
+  in play with 2 on the playfield. `physical_only` with a count reset raises "Cannot reset physical balls";
+  `min_virtual_physical` never posted `full` in the two-player run. A one-ball device makes a virtual lock with
+  default settings; `balls_to_replace` there ends in a KABOOM ball-count assertion.
+- A reset of a player var on `mode_x_stopped` in `base` misses the end of a ball (base has stopped already); also
+  reset on `mode_base_started`. Machine-config `variable_player` can't set player vars (`CFE-variable_player-1`).
+- After a tilt, `balls_in_play` is 0, so `MpfGameTestCase.drain_all_balls()` drains nothing; add the ball to the
+  trough directly. Slam tilt ends the game; the next ball waits `settle_time` after the last warning-switch hit.
+- A machine's `modes/<builtin>/config/<builtin>.yaml` merges over MPF's: lists are appended (`Util.dict_merge`), so
+  `high_score` categories/defaults need `_overwrite: true`. `credits: events:` `credits:` can use event args
+  (`winners`). High score entry times out after `enter_initials_timeout` and the player is left out.
 - Ball search is off unless `enable_ball_search: true` (playfield) or `mpf: default_ball_search: true`.
 - Only the ball served at ball start is player-controlled; the `playfield.add_ball` docstring still mentions an old
   `player_controlled_eject_tag`, the setting is `player_controlled_eject_event`.
