@@ -37,7 +37,7 @@ def full_config(page):
     return [b for b in yaml_blocks(page) if b.startswith("#config_version")][-1]
 
 
-FILE_BLOCK = re.compile(r"^`((?:modes|config|shows)/[\w/.-]+\.(?:yaml|py))`:[ \t]*\n\s*\n```(?:yaml|python)\s*\n(.*?)^```",
+FILE_BLOCK = re.compile(r"^`((?:modes|config|shows|machine_code|tests)/[\w/.-]+\.(?:yaml|py))`:[ \t]*\n\s*\n```(?:yaml|python)\s*\n(.*?)^```",
                         re.M | re.S)
 
 
@@ -1541,7 +1541,8 @@ class TestExtraBallWithoutGroupLimit(BallSaveMachine):
 
 def example_machine(page, config_change=None, file_changes=None):
     """A machine from an examples page: its labelled machine config and every labelled mode file."""
-    files = {k: v for k, v in page_files(page).items() if k.startswith("modes/")}
+    files = {k: v for k, v in page_files(page).items()
+             if k.startswith(("modes/", "machine_code/", "tests/")) or (k.startswith("config/") and k != "config/config.yaml")}
     for key, change in (file_changes or {}).items():
         files[key] = change(files[key])
     config = full_config(page)
@@ -3290,6 +3291,564 @@ class TestTiltBuildDebounceDefault(TiltBuildMachine):
         self.begin()
         self.assertEqual(300, self.machine.modes["tilt"]._multiple_hit_window)
         self.assertEqual([1, 2], bob_hits(self, [0, .4]))
+
+
+MODE_CODE_PAGE = "architecture/mode-code.md"
+
+
+def forget_machine_modules():
+    """Mode code is imported as `modes.<name>.code...`; drop cached copies so each machine loads its own file."""
+    import sys
+    from mpf.core.utility_functions import Util
+    for name in [n for n in sys.modules if n == "modes" or n.startswith("modes.")]:
+        del sys.modules[name]
+    Util.string_to_class.cache_clear()  # lru_cache: one process would otherwise get the first machine's class
+
+
+class TestModeCode(ExampleMachine):
+    """architecture/mode-code.md: the mystery mode's code and config, read from the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        forget_machine_modules()
+        cls.machine_dir = example_machine(MODE_CODE_PAGE)
+
+    def state(self):
+        player = self.machine.game.player
+        events = list(self.log)
+        del self.log[:]
+        return player.score, player["mystery_collected"], events
+
+    def scoop(self, wait=5.1):
+        self.hit("s_scoop")
+        self.advance_time_and_run(wait)
+
+    def test_walkthrough(self):
+        from unittest import mock
+        self.log = []
+        for name in ("mystery_award", "mystery_lit", "mystery_stopped", "mode_mystery_started",
+                     "player_mystery_collected"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(
+                (name, kwargs.get("award", kwargs.get("collected")) if name in ("mystery_award", "mystery_stopped")
+                 else None)), priority=-9)
+        mode = self.machine.modes["mystery"]
+        # mode_init ran at startup: the setting arrived as one string and was split
+        self.assertEqual("small_points, big_points, extra_time", mode.config["mode_settings"]["awards"])
+        self.assertEqual(["small_points", "big_points", "extra_time"], mode.awards)
+        self.assertEqual(5000, mode.relight_ms)
+        with mock.patch("random.choice", side_effect=lambda seq: seq[0]):
+            self.advance_time_and_run(1)
+            self.start_game()
+            self.advance_time_and_run(3)
+            self.assertEqual((0, 0, [("mode_mystery_started", None)]), self.state())
+            self.hit("s_scoop")
+            self.assertEqual((5000, "small_points", [("player_mystery_collected", None),
+                                                      ("mystery_award", "small_points")]), self.state())
+            self.hit("s_scoop")
+            self.assertEqual((5000, "small_points", []), self.state())
+            self.advance_time_and_run(5)
+            self.assertEqual([("mystery_lit", None)], self.state()[2])
+            self.hit("s_scoop")
+            self.assertEqual((30000, "small_points,big_points"), self.state()[:2])
+            self.advance_time_and_run(5.1)
+            self.scoop()
+            self.assertEqual((30000, "small_points,big_points,extra_time"), self.state()[:2])
+            self.assertEqual(1, self.machine.game.player.mystery_extra_time)
+            self.scoop()
+            self.assertEqual((35000, "small_points"), self.state()[:2])
+            self.scoop(wait=2)
+            self.assertEqual((60000, "small_points,big_points"), self.state()[:2])
+            self.drain_all_balls()
+            self.advance_time_and_run(4)
+            events = self.state()[2]
+            self.assertIn(("mystery_stopped", "small_points,big_points"), events)
+            self.assertIn(("mode_mystery_started", None), events)
+            self.advance_time_and_run(6)
+            self.assertEqual([], self.state()[2])  # no mystery_lit: the delay died with the mode
+            self.hit("s_scoop")
+            self.assertEqual((60000, "small_points,big_points,extra_time"), self.state()[:2])
+            self.assertEqual(2, self.machine.game.player.mystery_extra_time)
+
+
+class TestModeCodeUnsetVariable(ExampleMachine):
+    """architecture/mode-code.md note: without `or ""`, the first scoop fails on the unset (0) player variable."""
+
+    @classmethod
+    def setUpClass(cls):
+        forget_machine_modules()
+        cls.machine_dir = example_machine(MODE_CODE_PAGE, file_changes={
+            "modes/mystery/code/mystery.py": lambda t: t.replace(
+                '(self.player["mystery_collected"] or "").split', 'self.player["mystery_collected"].split', 1)})
+
+    def test_int_has_no_split(self):
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        with self.assertRaises(Exception) as caught:
+            self.hit("s_scoop")
+        self.assertIn("'int' object has no attribute 'split'", str(caught.exception))
+
+
+CUSTOM_CODE_PAGE = "architecture/custom-code.md"
+
+
+class TestCustomCode(ExampleMachine):
+    """architecture/custom-code.md: GameStats loads at startup, counts games and posts attract_idle."""
+
+    @classmethod
+    def setUpClass(cls):
+        forget_machine_modules()
+        cls.machine_dir = example_machine(CUSTOM_CODE_PAGE)
+
+    def play_game(self):
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        self.assertIsNone(self.machine.game)
+
+    def test_walkthrough(self):
+        ended = []
+        idle = []
+        self.machine.events.add_handler("game_ended", lambda **kwargs: ended.append(self.machine.clock.get_time()))
+        self.machine.events.add_handler("attract_idle", lambda **kwargs: idle.append(
+            (round(self.machine.clock.get_time() - ended[-1], 1), kwargs["games_played"])), priority=-9)
+        self.assertEqual(["GameStats"], [type(c).__name__ for c in self.machine.custom_code])
+        self.assertIsNone(self.machine.variables.get_machine_var("games_played"))
+        self.advance_time_and_run(1)
+        self.play_game()
+        self.assertEqual(1, self.machine.variables.get_machine_var("games_played"))
+        self.advance_time_and_run(20)
+        self.play_game()  # a new game within 30 s cancels the idle delay
+        self.assertEqual(2, self.machine.variables.get_machine_var("games_played"))
+        self.assertEqual([], idle)
+        self.advance_time_and_run(28)
+        self.assertEqual([(30.0, 2)], idle)
+        self.assertTrue(self.machine.variables.machine_vars["games_played"]["persist"])
+
+
+class TestCustomCodeFolderNamedCode(ExampleMachine):
+    """architecture/custom-code.md note: a folder called code."""
+
+    @classmethod
+    def setUpClass(cls):
+        forget_machine_modules()
+        files = {k.replace("machine_code/", "code/"): v for k, v in page_files(CUSTOM_CODE_PAGE).items()
+                 if k.startswith("machine_code/")}
+        config = full_config(CUSTOM_CODE_PAGE).replace("machine_code.game_stats", "code.game_stats")
+        cls.machine_dir = make_machine(config, files=files)
+
+    @expect_startup_error()
+    def test_code_folder(self):
+        message = "No module named 'code.game_stats'; 'code' is not a package"
+        self.assertIn(message, str(self.startup_error))
+        self.assertIn(message, (CONTENT / CUSTOM_CODE_PAGE).read_text(encoding="utf-8"))
+
+
+TESTING_PAGE = "architecture/testing.md"
+
+
+class TestTestingPage(unittest.TestCase):
+    """architecture/testing.md: the page's machine and tests/test_rules.py, run as a separate process."""
+
+    def test_run_the_page_tests(self):
+        import subprocess
+        import sys
+        import time
+        files = {k: v for k, v in page_files(TESTING_PAGE).items() if k.startswith(("modes/", "tests/"))}
+        self.assertIn("tests/test_rules.py", files)
+        machine = make_machine(full_config(TESTING_PAGE), files=files)
+        try:
+            start = time.time()
+            result = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=machine,
+                                    capture_output=True, text=True, timeout=300)
+            elapsed = time.time() - start
+            out = result.stdout + result.stderr
+            self.assertEqual(0, result.returncode, out[-3000:])
+            self.assertRegex(out, r"^\.\.\.\.\n")
+            self.assertRegex(out, r"Ran 4 tests in [\d.]+s\n\nOK")
+            ran = float(re.search(r"Ran 4 tests in ([\d.]+)s", out).group(1))
+            print("testing page: unittest reported %.2fs, process took %.2fs" % (ran, elapsed))
+            self.assertLess(ran, 1)
+            self.assertNotIn(" : DEBUG : ", out)
+            verbose = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=machine,
+                                     capture_output=True, text=True, timeout=300)
+            out = verbose.stdout + verbose.stderr
+            self.assertEqual(0, verbose.returncode)
+            self.assertIn(" : DEBUG : ", out)
+            for name in ("test_ramp_scores_1000", "test_ball_save", "test_drain_after_the_save_ends_the_ball",
+                         "test_two_players_take_turns"):
+                self.assertIn(name + " (test_rules.TestRules." + name + ") ...", out)
+        finally:
+            shutil.rmtree(machine, ignore_errors=True)
+
+
+class TestTestingPageLegacyTools(unittest.TestCase):
+    """architecture/testing.md warning: mpf test and MpfMachineTestCase import the old Kivy media controller."""
+
+    def test_messages(self):
+        import subprocess
+        import sys
+        page = " ".join((CONTENT / TESTING_PAGE).read_text(encoding="utf-8").split())
+        mpf_exe = Path(sys.executable).with_name("mpf.exe")
+        if not mpf_exe.exists():
+            mpf_exe = Path(sys.executable).with_name("mpf")
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "t.txt").write_text("x", encoding="utf-8")
+            result = subprocess.run([str(mpf_exe), "test", "t.txt"], cwd=folder, capture_output=True, text=True,
+                                    timeout=120)
+        self.assertIn("ModuleNotFoundError: No module named 'kivy'", result.stdout + result.stderr)
+        self.assertIn("ModuleNotFoundError: No module named 'kivy'", page)
+        result = subprocess.run([sys.executable, "-c", "import mpf.tests.MpfMachineTestCase as m; m.MockConfigPlayers"
+                                 "._load_mc_players(object)"], capture_output=True, text=True, timeout=120)
+        self.assertIn("No module named 'mpfmc'", result.stdout + result.stderr)
+        self.assertIn("No module named 'mpfmc'", page)
+
+    @unittest.expectedFailure
+    def test_mpf_test_without_kivy(self):
+        """Fails while mpf/commands/test.py imports kivy at the top; passes once it no longer needs it."""
+        import importlib
+        importlib.import_module("mpf.commands.test")
+
+
+DEVICES_PAGE = "architecture/devices.md"
+
+
+class TestDevicesPage(ExampleMachine):
+    """architecture/devices.md: a mode counter with a delayed enable and a condition on its value."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(DEVICES_PAGE)
+
+    def state(self):
+        counter = self.machine.counters["ramp_counter"]
+        events = list(self.log)
+        del self.log[:]
+        return counter.value, counter.enabled, events
+
+    def test_walkthrough(self):
+        from mpf.core.mode_device import ModeDevice
+        from mpf.core.system_wide_device import SystemWideDevice
+        self.log = []
+        for name in ("target_lit_hit", "logicblock_ramp_counter_hit", "mode_base_started"):
+            self.machine.events.add_handler(name, lambda name=name, **kwargs: self.log.append(name), priority=-9)
+        self.advance_time_and_run(1)
+        counter = self.machine.counters["ramp_counter"]
+        self.assertIsInstance(counter, ModeDevice)
+        self.assertIsInstance(counter, SystemWideDevice)
+        self.assertEqual((None, None, []), self.state())
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(.1)
+        self.assertEqual((0, False, ["mode_base_started"]), self.state())
+        self.advance_time_and_run(1)
+        self.hit("s_ramp")
+        self.assertEqual((0, False, []), self.state())
+        self.advance_time_and_run(1.5)
+        self.hit("s_ramp")
+        self.assertEqual((1, True, ["logicblock_ramp_counter_hit"]), self.state())
+        self.hit("s_target")
+        self.assertEqual((1, True, []), self.state())
+        self.hit("s_ramp")
+        self.hit("s_target")
+        self.assertEqual((2, True, ["logicblock_ramp_counter_hit", "target_lit_hit"]), self.state())
+        self.drain_all_balls()
+        self.advance_time_and_run(4)
+        self.assertEqual(0, counter.value)
+
+    def test_attribute_table_matches_source(self):
+        monitored = set()
+        for path in (Path(__file__).resolve().parents[2] / "mpf" / "devices").rglob("*.py"):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("@DeviceMonitor("):
+                    monitored.update(re.findall(r'"(\w+)"', line))
+        page = (CONTENT / DEVICES_PAGE).read_text(encoding="utf-8")
+        table = page.split("| Collection | Attributes |", 1)[1].split("\n\n", 1)[0]
+        listed = set(re.findall(r"`(\w+)`", "\n".join(row.split("|")[2] for row in table.splitlines()[2:])))
+        self.assertTrue(listed)
+        self.assertEqual(set(), listed - monitored)
+
+
+class TestDevicesWrongAttribute(ExampleMachine):
+    """architecture/devices.md warning: device.counters.x.count is silently false."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(DEVICES_PAGE, file_changes={
+            "modes/base/config/base.yaml": lambda t: t.replace("ramp_counter.value>=2", "ramp_counter.count>=2", 1)})
+
+    def test_silently_false(self):
+        self.mock_event("target_lit_hit")
+        self.advance_time_and_run(1)
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.hit("s_ramp", 2)
+        self.assertEqual(2, self.machine.counters["ramp_counter"].value)
+        self.hit("s_target")
+        self.assertEventNotCalled("target_lit_hit")
+        with self.assertRaisesRegex(ValueError, "Attribute count does not exist."):
+            self.machine.counters["ramp_counter"].get_placeholder_value("count")
+
+
+BOOT_PAGE = "architecture/boot-and-config.md"
+BOOT_PROBE = (
+    "from mpf.core.custom_code import CustomCode\n\n\n"
+    "class Probe(CustomCode):\n"
+    "    def on_load(self):\n"
+    "        self.machine.events.post('custom_code_loaded')\n")
+
+
+def boot_machine(hardware_change=None):
+    forget_machine_modules()
+    files = {k: v for k, v in page_files(BOOT_PAGE).items() if k != "config/config.yaml"}
+    if hardware_change:
+        files["config/hardware.yaml"] = hardware_change(files["config/hardware.yaml"])
+    files["boot_probe.py"] = BOOT_PROBE
+    config = full_config(BOOT_PAGE).replace("\nmodes:\n", "\ncustom_code: boot_probe.Probe\n\nmodes:\n", 1)
+    return make_machine(config, files=files)
+
+
+class TestBootOrder(HowEventsMachine):
+    """architecture/boot-and-config.md: phases, mode_init, custom code, reset and attract, from recorded events."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = boot_machine()
+
+    def test_order(self):
+        posted = self.posted
+        def at(name):
+            self.assertIn(name, posted)
+            return posted.index(name)
+        order = ["init_phase_1", "init_phase_2", "base_mode_init", "init_phase_3", "custom_code_loaded",
+                 "init_phase_4", "init_phase_5", "init_done", "machine_reset_phase_1", "machine_reset_phase_2",
+                 "machine_reset_phase_3", "reset_complete", "mode_attract_started"]
+        positions = [at(name) for name in order]
+        self.assertEqual(sorted(positions), positions)
+        self.assertEqual(2, self.machine.config["machine"]["balls_installed"])
+        self.assertIn("s_ramp", self.machine.switches)  # from the included file
+
+
+class TestBootIncludedFileWins(GuideMachine):
+    """architecture/boot-and-config.md: a value in both files comes from the included file."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = boot_machine(lambda t: t + "\nmachine:\n  balls_installed: 3\n")
+
+    def test_included_wins(self):
+        self.assertEqual(3, self.machine.config["machine"]["balls_installed"])
+
+
+class TestBootMergeRules(unittest.TestCase):
+    """architecture/boot-and-config.md "How files are merged", by calling Util.dict_merge."""
+
+    def test_rules(self):
+        from mpf.core.utility_functions import Util
+        first = {"a": {"x": 1, "y": 2}, "list": [1, 2], "keep": {"k": 1}, "gone": {"g": 1}, "swap": {"s": 1, "t": 2}}
+        second = {"a": {"y": 3, "z": 4}, "list": [3], "new": 5, "gone": {"_delete": True},
+                  "swap": {"_overwrite": True, "u": 9}}
+        self.assertEqual({"a": {"x": 1, "y": 3, "z": 4}, "list": [1, 2, 3], "keep": {"k": 1}, "new": 5,
+                          "swap": {"u": 9}}, Util.dict_merge(first, second))
+
+
+class TestBootConfigCache(unittest.TestCase):
+    """architecture/boot-and-config.md "The config cache": written to the temp folder, reused, refreshed on change."""
+
+    def test_cache(self):
+        import os
+        import time
+        from unittest import mock
+        from mpf.core.config_processor import ConfigProcessor
+        machine = boot_machine()
+        try:
+            files = [os.path.join(machine, "config", "config.yaml")]
+            loader = ConfigProcessor(True, True)
+            spec = loader.load_config_spec()
+            cache = loader.get_cache_filename(files)
+            self.assertEqual(tempfile.gettempdir(), os.path.dirname(cache))
+            self.assertTrue(cache.endswith(".mpf_cache"))
+            if os.path.exists(cache):
+                os.remove(cache)
+            first = loader.load_config_files_with_cache(files, "machine", config_spec=spec)
+            self.assertTrue(os.path.exists(cache))
+            with mock.patch.object(ConfigProcessor, "_load_config_from_cache",
+                                   wraps=loader._load_config_from_cache) as from_cache:
+                self.assertEqual(first, loader.load_config_files_with_cache(files, "machine", config_spec=spec))
+                self.assertEqual(1, from_cache.call_count)
+                # change the included file: the cache is not used
+                time.sleep(1.1)
+                hardware = os.path.join(machine, "config", "hardware.yaml")
+                with open(hardware, "a", encoding="utf-8") as f:
+                    f.write("\n")
+                loader.load_config_files_with_cache(files, "machine", config_spec=spec)
+                self.assertEqual(2, from_cache.call_count)  # read, then rejected for the changed sub-file
+            # -a: no_load_cache
+            with mock.patch.object(ConfigProcessor, "_load_config_from_cache") as from_cache:
+                ConfigProcessor(False, True).load_config_files_with_cache(files, "machine", config_spec=spec)
+                self.assertEqual(0, from_cache.call_count)
+            os.remove(cache)
+        finally:
+            shutil.rmtree(machine, ignore_errors=True)
+
+
+BCP_PAGE = "architecture/bcp.md"
+
+
+class BcpPageMachine(ExampleMachine):
+    """The BCP page's machine with MPF's MockBcpClient as the media controller."""
+
+    def __init__(self, methodName='runTest'):
+        super().__init__(methodName)
+        self.machine_config_patches['bcp'] = \
+            {"connections": {"local_display": {"type": "mpf.tests.MpfBcpTestCase.MockBcpClient"}}, "servers": []}
+
+    def get_use_bcp(self):
+        return True
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(BCP_PAGE)
+
+    def client(self):
+        return self.machine.bcp.transport.get_named_client("local_display")
+
+    def sent(self):
+        out = []
+        while not self.client().send_queue.empty():
+            out.append(self.client().send_queue.get_nowait())
+        return out
+
+    def receive(self, cmd, **kwargs):
+        self.client().receive_queue.put_nowait((cmd, kwargs))
+        self.advance_time_and_run(.1)
+
+
+class TestBcpPage(BcpPageMachine):
+    """architecture/bcp.md: what MPF sends with GMC's subscriptions, and what the client can send."""
+
+    def test_gmc_subscriptions(self):
+        page = (CONTENT / BCP_PAGE).read_text(encoding="utf-8")
+        gmc = (Path(__file__).resolve().parents[3] / "gmc" / "mpf-gmc" / "addons" / "mpf-gmc" / "scripts"
+               / "bcp_server.gd")
+        if gmc.exists():
+            source = gmc.read_text(encoding="utf-8")
+            for line in re.findall(r"^(monitor_start\?category=\w+|register_trigger\?event=\w+)$", page, re.M):
+                self.assertIn('_send("%s")' % line, source)
+        boot = self.sent()
+        self.assertEqual([("trigger", "slides_play")], [(c, a.get("name")) for c, a in boot])
+        for category in ("core_events", "service_events", "modes", "player_vars", "machine_vars"):
+            self.receive("monitor_start", category=category)
+        for event in ("ramp_made", "client_event"):
+            self.receive("register_trigger", event=event)
+        after = [c for c, a in self.sent()]
+        self.assertEqual("mode_list", after[0])
+        self.assertIn("machine_variable", after)
+        self.assertIn("settings", after)
+        self.start_game()
+        self.advance_time_and_run(3)
+        commands = [(c, a.get("name")) for c, a in self.sent()]
+        for item in [("mode_start", "game"), ("player_added", None), ("player_variable", "score"),
+                     ("player_turn_start", None), ("mode_start", "base"), ("trigger", "slides_play"),
+                     ("ball_start", None)]:
+            self.assertIn(item, commands)
+        self.assertLess(commands.index(("mode_start", "game")), commands.index(("ball_start", None)))
+        self.hit("s_ramp")
+        self.assertEqual([("player_variable", "score"), ("trigger", "ramp_made")],
+                         [(c, a.get("name")) for c, a in self.sent()])
+        self.receive("switch", name="s_ramp", state=1)
+        self.receive("switch", name="s_ramp", state=0)
+        self.assertEqual(2000, self.machine.game.player.score)
+        self.sent()
+        got = []
+        self.machine.events.add_handler("client_event", lambda **kwargs: got.append(kwargs))
+        self.receive("trigger", name="client_event", value=5)
+        self.assertEqual([{"value": 5, "_from_bcp": True}], got)
+        self.assertEqual([], self.sent())  # registered, but not sent back
+        self.drain_all_balls()
+        self.advance_time_and_run(3)
+        commands = [(c, a.get("name")) for c, a in self.sent()]
+        self.assertEqual([("trigger", "slides_clear"), ("mode_stop", "base")], commands[:2])
+        self.assertIn(("ball_end", None), commands)
+
+    def test_wire_format(self):
+        from mpf.core.bcp.bcp_socket_client import encode_command_string, decode_command_string
+        page = (CONTENT / BCP_PAGE).read_text(encoding="utf-8")
+        line = encode_command_string("player_variable", name="score", value=1000, prev_value=0, change=1000,
+                                     player_num=1)
+        self.assertIn(line, page)
+        self.assertEqual(("player_variable", {"name": "score", "value": 1000, "prev_value": 0, "change": 1000,
+                                              "player_num": 1}), decode_command_string(line))
+        json_line = encode_command_string("trigger", name="slides_play", settings={"base": {"action": "play"}},
+                                          context="base")
+        self.assertIn(json_line, page)
+        self.assertEqual("slides_play", decode_command_string(json_line)[1]["name"])
+
+
+class TestBcpPageWithoutModeSubscriptions(BcpPageMachine):
+    """architecture/bcp.md: without modes/core_events, only player variables and slide triggers are sent."""
+
+    def test_only_player_vars_and_triggers(self):
+        self.sent()
+        self.receive("monitor_start", category="player_vars")
+        self.sent()
+        self.start_game()
+        self.advance_time_and_run(3)
+        self.assertEqual({"player_variable", "trigger"}, {c for c, a in self.sent()})
+
+
+PLATFORMS_PAGE = "architecture/platforms.md"
+
+
+class PlatformsPageMachine(ExampleMachine):
+    PLATFORM = "smart_virtual"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.machine_dir = example_machine(PLATFORMS_PAGE)
+
+    def get_platform(self):
+        return self.PLATFORM
+
+    def rules(self):
+        names = {}
+        for switch in self.machine.switches.values():
+            names[switch.hw_switch] = switch.name
+        drivers = {coil.hw_driver: coil.name for coil in self.machine.coils.values()}
+        return {(names[sw], drivers[drv]): rule for (sw, drv), rule in self.machine.default_platform.rules.items()}
+
+    def walkthrough(self):
+        self.advance_time_and_run(1)
+        self.assertEqual({}, self.rules())
+        self.hit_and_release_switch("s_start")
+        self.advance_time_and_run(5)
+        self.assertEqual({("s_left_flipper", "c_left_flipper"): "pulse_on_hit_and_enable_and_release",
+                          ("s_left_sling", "c_left_sling"): "pulse_on_hit"}, self.rules())
+        self.assertEqual("pulsed_10", self.machine.coils["c_trough_eject"].hw_driver.state)
+        self.machine.switch_controller.process_switch("s_left_sling", 1)
+        self.advance_time_and_run(.1)
+        self.assertEqual(1, self.machine.switches["s_left_sling"].state)
+        self.assertEqual("disabled", self.machine.coils["c_left_sling"].hw_driver.state)
+        self.machine.switch_controller.process_switch("s_left_sling", 0)
+        return self.machine.ball_devices["bd_trough"].balls, self.machine.playfield.balls
+
+
+class TestPlatformsSmartVirtual(PlatformsPageMachine):
+    """architecture/platforms.md: smart_virtual moves the ball; rules are stored, not run."""
+
+    def test_smart_virtual(self):
+        self.assertEqual("SmartVirtualHardwarePlatform", type(self.machine.default_platform).__name__)
+        self.assertEqual((1, 1), self.walkthrough())
+
+
+class TestPlatformsVirtual(PlatformsPageMachine):
+    """architecture/platforms.md: virtual records the eject pulse but the ball never leaves."""
+
+    PLATFORM = "virtual"
+
+    def test_virtual(self):
+        self.assertEqual("VirtualHardwarePlatform", type(self.machine.default_platform).__name__)
+        self.assertEqual((2, 0), self.walkthrough())
 
 
 if __name__ == "__main__":

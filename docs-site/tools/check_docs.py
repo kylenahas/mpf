@@ -69,6 +69,11 @@ def check_settings(page, section, settings, path):
             continue
         sub, is_dict = subconfig_of(section, k)
         if sub and isinstance(v, dict):
+            sub_keys, _ = keys_for(sub)
+            if not is_dict and v and all(isinstance(i, dict) for i in v.values()) and not set(v) & sub_keys:
+                # named entries, e.g. bcp: connections: local_display: {...} (MPF reads these with .items(),
+                # although config_spec says list|subconfig)
+                is_dict = True
             if is_dict:
                 for name, item in v.items():
                     check_settings(page, sub, item, "{}:{}:{}".format(path, k, name))

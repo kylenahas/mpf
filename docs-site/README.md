@@ -132,7 +132,14 @@ Done:
   Generic rule patterns, not copies of any specific game. Each verified with the variants the page describes.
 - For developers: how-events-work (verified: depth-first queue order, boolean veto from mode code, relay via ball save,
   queue wait from code and queue_relay_player, ball modes missing ball_ending, own-start-event error, and the full
-  boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted).
+  boot-to-game-over event timeline checked as an ordered subsequence of what MPF posted). Added 2026-11-15, all verified:
+  mode-code (mystery award: code: lookup, lifecycle, mode handlers/delays cleared on stop, mode_settings as strings),
+  custom-code (custom_code: class, on_load timing, machine vars, `code` folder name clash), testing (MpfGameTestCase
+  on a machine folder, run as a subprocess; mpf test / MpfMachineTestCase need Kivy / mpfmc), devices (collections,
+  mode vs machine devices, control-event delays, @DeviceMonitor attribute table checked against the source),
+  boot-and-config (load order, config: includes, dict_merge rules, config cache, init phases from recorded events),
+  bcp (messages recorded from MockBcpClient with GMC's subscriptions, wire format, client commands), platforms
+  (hardware rules per device, virtual vs smart_virtual).
 - Generator: config pages by kind (devices / players / sections / shared) with required settings, tested example,
   settings table, ball_devices counter/ejector merge, control events (method checked), events posted, used-in list;
   events page; CLI; built-in modes; per-platform pages; config error index.
@@ -221,6 +228,22 @@ Findings from running MPF (already reflected in the pages):
 - A tagged switch posts `sw_<tag>` then `sw_<tag>_active`; a mode can start on the first and score on the second (a
   player on the mode's own start event is refused). The starting hit isn't seen by the new mode.
 - A timer posts `_tick` with `ticks: 0` on start, and the step reaching `end_value` posts only `_complete` (no tick).
+- MPF bug-ish: `mpf test` (mpf/commands/test.py) imports kivy and `MpfMachineTestCase` imports mpfmc, so neither works
+  with GMC only. Documented on architecture/testing; `test_mpf_test_without_kivy` is an expected failure. Use
+  `MpfGameTestCase` with get_machine_path / get_config_file / get_platform.
+- `Util.string_to_class` is lru_cached: tests that boot several machine folders with the same `code:` name get the
+  first class; `forget_machine_modules()` in test_guides.py clears it and `modes.*` from sys.modules.
+- An unset player variable reads as 0 (int). `mode_settings` values arrive as plain YAML strings.
+- A folder named `code` can't hold custom code (`'code' is not a package`: the stdlib module wins).
+- A condition on a device attribute that doesn't exist is silently false (BaseTemplate.evaluate returns the default
+  on ValueError); e.g. counters have `value`, not `count`.
+- A `config:` include is merged over the including file (the included file wins).
+- `MpfTestCase` with `-v` turns on MPF's full DEBUG log in the console.
+- Events that arrive over BCP get `_from_bcp: True` and are never sent back out, even to clients that registered for
+  them. slide/widget/sound players are sent as `trigger?name=slides_play` etc. regardless of subscriptions; mode,
+  player and ball messages need `monitor_start` (GMC asks for core_events, service_events, modes, player_vars,
+  machine_vars).
+- The virtual platforms store hardware rules but never run them; only smart_virtual moves balls.
 - Autofire switches can't have `playfield_active` either (`CFE-autofire-1`).
 - Three-lock multiball releasing all three locked balls: `balls_to_replace: 2` plus `eject_all_events` on the lock
   device (the multiball only takes ball_count minus balls in play from locks, and counts the player's ball, which is
