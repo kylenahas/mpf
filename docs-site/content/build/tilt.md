@@ -63,13 +63,45 @@ Each warning adds 1 to the player variable `tilt_warnings` and posts two events:
 | `tilt_warning` | `warnings`, the count so far, and `warnings_remaining` |
 | `tilt_warning_1`, `tilt_warning_2`, ... | none; the number is in the name |
 
-With the default `warnings_to_tilt: 3`, the first two hits are warnings and the third tilts. A plumb bob swings, so
-it can close several times from one nudge: hits closer together than `multiple_hit_window` (300 ms) count once.
+With the default `warnings_to_tilt: 3`, the first two hits are warnings and the third tilts. A swinging plumb bob
+can close several times from one nudge; the [tilt debounce](#tilt-debounce) makes those count as one warning.
 
 Warnings belong to the player and go back to 0 when the ball ends (`reset_warnings_events: ball_will_end`). A drain
 that a ball save catches doesn't end the ball, so the warnings stay: in the test run, a player with two warnings
 drained during the ball save, got the ball back, and tilted on the next hit of the bob. After a drain with the save
 over, ball 2 started with 0 warnings, and the next hit was warning 1.
+
+### Tilt debounce
+
+After a nudge, the plumb bob swings and can touch its ring several times in quick succession. The tilt debounce
+ignores warning-switch hits that come too soon after the last warning, so one nudge is one warning. MPF calls the
+setting `multiple_hit_window`, and its default is 300 ms.
+
+To change it, add the tilt mode's config to your machine as `modes/tilt/config/tilt.yaml`, with only the setting you
+change. MPF merges it over its own copy of the mode:
+
+```yaml
+#config_version=6
+
+tilt:
+  multiple_hit_window: 500ms
+```
+
+The window is measured from the last hit that **counted** as a warning, not from the last hit of the switch
+(`Tilt._tilt_warning_switch_handler`). With 500 ms in the test run:
+
+| Bob hits at | Warnings | Why |
+|---|---|---|
+| 0 s | 1 | |
+| 0.4 s | 1 | 0.4 s after the last warning: ignored |
+| 0.8 s | 2 | 0.8 s after the last warning, although only 0.4 s after the previous hit |
+
+With the default 300 ms, the hit at 0.4 s would have been the second warning.
+
+A longer window forgives more swinging but also lets a player nudge twice in quick succession with only one warning.
+The debounce only applies to switches tagged `tilt_warning`. A warning sent with `tilt_warning_events` always counts,
+and so does a hit of a `tilt` or `slam_tilt` switch. The value is read when the tilt mode starts, so restart MPF after
+changing it.
 
 ## What a tilt does
 
@@ -114,12 +146,12 @@ spec:
 | Setting | Default | What it does |
 |---|---|---|
 | `warnings_to_tilt` | `3` | The hit that brings the player's warnings to this number tilts. |
-| `multiple_hit_window` | `300ms` | Hits of a warning switch closer together than this count as one. |
+| `multiple_hit_window` | `300ms` | The [tilt debounce](#tilt-debounce): warning-switch hits this soon after the last warning are ignored. |
 | `settle_time` | `5s` | After a tilt, the next ball waits until no warning switch has been hit for this long. |
 | `reset_warnings_events` | `ball_will_end` | When the player's warnings go back to 0. |
 | `tilt_warnings_player_var` | `tilt_warnings` | The player variable that counts warnings. |
 | `tilt_warning_switch_tag`, `tilt_switch_tag`, `slam_tilt_switch_tag` | `tilt_warning`, `tilt`, `slam_tilt` | The tags the mode looks for. |
-| `tilt_events`, `tilt_warning_events`, `tilt_slam_tilt_events` | none | Events that tilt, warn or slam tilt like a switch hit would. A warning from an event isn't subject to `multiple_hit_window` (`Tilt.mode_start`). |
+| `tilt_events`, `tilt_warning_events`, `tilt_slam_tilt_events` | none | Events that tilt, warn or slam tilt like a switch hit would. A warning from an event isn't debounced (`Tilt.mode_start`). |
 
 To change them, add `modes/tilt/config/tilt.yaml` to your machine with a `tilt:` section holding only what you
 change. MPF merges it over its own copy. The [Tilt with warnings](/examples/ball-in-play/tilt/#the-settings) example

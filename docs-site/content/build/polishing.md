@@ -164,7 +164,7 @@ The [ball devices guide](/build/ball-devices/#ball-search) has the search phases
 |---|---|
 | Let the player skip a long bonus count with both flipper buttons | [End-of-ball bonus](/examples/scoring/end-of-ball-bonus/) (`flipper_cancel`) |
 | Don't let a swinging plumb bob tilt the next ball | [Tilt](/build/tilt/#what-a-tilt-does) (`settle_time`) |
-| Count a swinging plumb bob as one warning | [Tilt](/build/tilt/#warnings) (`multiple_hit_window`) |
+| Count a swinging plumb bob as one warning | [Tilt debounce](/build/tilt/#tilt-debounce) (`multiple_hit_window`) |
 | A multiball that releases all its locked balls at once | [Multiball and ball locks](/build/multiball/#releasing-all-three-balls) |
 | Keep an unfinished hurry-up for the player's next ball | [Modes](/build/modes/#a-mode-that-survives-a-drain-hurry-up) (`restart_on_next_ball`) |
 

@@ -3243,5 +3243,49 @@ class TestPolishBallSearch(PolishMachine):
         self.assertIn("ball_search_started", self.events())
 
 
+TILT_DEBOUNCE_FILE = "#config_version=6\n\ntilt:\n  multiple_hit_window: 500ms\n"
+
+
+def bob_hits(test, times):
+    """Hit the plumb bob at the given times (seconds from the first hit); return the warning count after each."""
+    counts = []
+    previous = 0
+    for at in times:
+        test.advance_time_and_run(at - previous)
+        previous = at
+        test.machine.switch_controller.process_switch("s_plumb_bob", 1)
+        test.machine.switch_controller.process_switch("s_plumb_bob", 0)
+        test.advance_time_and_run(0)
+        counts.append(test.machine.game.player.vars.get("tilt_warnings", 0))
+    return counts
+
+
+class TestTiltBuildDebounce(TiltBuildMachine):
+    """build/tilt.md "Tilt debounce": the override file from the page; the window runs from the last warning."""
+
+    @classmethod
+    def setUpClass(cls):
+        page = (CONTENT / TILT_BUILD_PAGE).read_text(encoding="utf-8")
+        assert "```yaml\n" + TILT_DEBOUNCE_FILE + "```" in page
+        cls.machine_dir = example_machine(TILT_BUILD_PAGE)
+        path = Path(cls.machine_dir, "modes", "tilt", "config", "tilt.yaml")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(TILT_DEBOUNCE_FILE, encoding="utf-8")
+
+    def test_500ms(self):
+        self.begin()
+        self.assertEqual(500, self.machine.modes["tilt"]._multiple_hit_window)
+        self.assertEqual([1, 1, 2], bob_hits(self, [0, .4, .8]))
+
+
+class TestTiltBuildDebounceDefault(TiltBuildMachine):
+    """build/tilt.md "Tilt debounce": with the default 300 ms, the hit at 0.4 s is the second warning."""
+
+    def test_300ms(self):
+        self.begin()
+        self.assertEqual(300, self.machine.modes["tilt"]._multiple_hit_window)
+        self.assertEqual([1, 2], bob_hits(self, [0, .4]))
+
+
 if __name__ == "__main__":
     unittest.main()

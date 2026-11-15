@@ -57,7 +57,7 @@ spec, and this example keeps them all:
 | Setting | Default | What it does |
 |---|---|---|
 | `warnings_to_tilt` | `3` | The hit that brings the player's warnings to this number tilts. So 3 means two warnings, then a tilt. |
-| `multiple_hit_window` | `300ms` | Hits of a warning switch closer together than this count as one. |
+| `multiple_hit_window` | `300ms` | The [tilt debounce](/build/tilt/#tilt-debounce): warning-switch hits this soon after the last warning are ignored. |
 | `settle_time` | `5s` | After a tilt, the next ball waits until no warning switch has been hit for this long. |
 | `reset_warnings_events` | `ball_will_end` | When the player's warnings go back to 0. |
 | `tilt_warnings_player_var` | `tilt_warnings` | The player variable that counts warnings. |
