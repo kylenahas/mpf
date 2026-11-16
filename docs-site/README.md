@@ -119,6 +119,9 @@ Done:
   bounceback, [keyboard]); the probe prints plain labels and can simulate the L key on `doc_key`.
   displays (own window.tscn, two MPFDisplays, target, pixelate filter, window settings from code, spawn_mpf; exporting
   and MPFDMDDisplay not run: no export templates / DMD hardware); the probe reports each display's top slide.
+  dmd (128x32 canvas with stretch canvas_items, virtual_dmd filter, MPFDMDDisplay frames recorded by an MPF custom
+  code probe standing in for the rgb_dmds hardware: 12288-byte RGB frames, one per picture change, filter grid not in
+  the frames; mono dmds:/dmd_frame from code only).
 - Examples (section weight 4; Reference is 5, For developers 6), in group folders so the sidebar stays short (old
   addresses have Hugo aliases): scoring/ end-of-ball-bonus (built-in bonus mode, rollover lanes raising a capped
   multiplier, flipper_cancel hurry-up), combos (tag events, combo-window mode, restarted timer), hurry-up (timer ticks

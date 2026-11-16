@@ -174,9 +174,9 @@ from the editor. **This wasn't run for this page**; what GMC adds, from its code
 
 ## DMD displays
 
-`MPFDMDDisplay` is a display that also sends what it shows to MPF, a frame at a time, shrunk to a set **Resolution** and
-with an optional colour order, for MPF to drive a physical RGB DMD (`classes/mpf_dmd_display.gd`). It needs DMD hardware
-configured in MPF and wasn't run for this page.
+`MPFDMDDisplay` is a display that also sends what it shows to MPF, a frame at a time, for MPF to drive a physical RGB
+DMD. [A 128×32 DMD](/gmc/dmd/) sets one up, along with designing slides at DMD resolution and the DMD look on a
+screen.
 
 ## The complete window
 

@@ -989,6 +989,136 @@ class TestDisplays(unittest.TestCase):
         self.assertEqual([], alive)
 
 
+DMD_PAGE = "gmc/dmd.md"
+
+# Test-only: an MPF custom code class that stands in for the DMD hardware and saves the last frame on `doc_shot`.
+DMD_FRAME_PROBE = """import os
+from mpf.core.custom_code import CustomCode
+
+
+class Recorder:
+    def __init__(self, probe):
+        self.probe = probe
+
+    def update(self, data):
+        self.probe.frames += 1
+        self.probe.last = bytes(data)
+
+    def set_brightness(self, brightness):
+        pass
+
+
+class FrameProbe(CustomCode):
+    def on_load(self):
+        self.frames = 0
+        self.last = None
+        self.shots = 0
+        self.machine.rgb_dmds["dmd"].hw_device = Recorder(self)
+        self.machine.events.add_handler("doc_shot", self.shot)
+
+    def shot(self, **kwargs):
+        self.delay.add(ms=500, callback=self.save)
+
+    def save(self):
+        self.shots += 1
+        with open(os.path.join(os.environ["DOC_SHOT_DIR"], "frame_%d.bin" % self.shots), "wb") as f:
+            f.write(self.last or b"")
+        print("DOC_FRAME %d frames=%d bytes=%d" % (self.shots, self.frames, len(self.last or b"")), flush=True)
+"""
+
+# Test-only: a Godot autoload that reports the window image size on `doc_shot`.
+DMD_SHOT_GD = """extends Node
+
+func _ready() -> void:
+\tMPF.server.status_changed.connect(self._on_status)
+
+func _on_status(status) -> void:
+\tif status == MPF.server.ServerStatus.CONNECTED:
+\t\tMPF.server.add_event_handler("doc_shot", self._shot)
+
+func _shot(_message = null) -> void:
+\tawait get_tree().process_frame
+\tawait RenderingServer.frame_post_draw
+\tvar img = get_viewport().get_texture().get_image()
+\tprint("DOC_IMAGE %dx%d" % [img.get_width(), img.get_height()])
+"""
+
+DMD_SCRIPT = """
+custom_code: frame_probe.FrameProbe
+
+event_player:
+  s_doc_shot_active: doc_shot
+
+switch_player:
+  start_event: mode_attract_started
+  steps:
+    - {time: 2s, switch: s_doc_shot, action: hit}
+    - {time: 1s, switch: s_start, action: hit}
+    - {time: 2s, switch: s_doc_shot, action: hit}
+"""
+
+DMD_FILTER = '\n[filter]\nfilter="virtual_dmd"\ncolumns=128.0\nrows=32.0\n'
+
+
+@unittest.skipUnless(GODOT and GMC, "set MPF_DOCS_GODOT and MPF_DOCS_GMC to run the GMC checks")
+class TestDmd(unittest.TestCase):
+    """gmc/dmd.md: the 128x32 project; frames reach MPF's rgb_dmds device, with and without the virtual_dmd filter."""
+
+    def run_page(self, with_filter):
+        page = (CONTENT / DMD_PAGE).read_text(encoding="utf-8")
+        self.assertIn("```ini" + DMD_FILTER + "```", page)
+        files = page_files(DMD_PAGE)
+        self.assertEqual({"project.godot", "window.tscn", "slides/attract.tscn", "slides/base.tscn",
+                          "config/config.yaml", "modes/base/config/base.yaml", "gmc.cfg"}, set(files))
+        files["gmc.cfg"] = with_godot_path(files["gmc.cfg"])
+        if with_filter:
+            files["gmc.cfg"] += DMD_FILTER
+        files["doc_shot.gd"] = DMD_SHOT_GD
+        files["project.godot"] = files["project.godot"].replace(
+            'MPF="*res://addons/mpf-gmc/mpf_gmc.gd"', 'MPF="*res://addons/mpf-gmc/mpf_gmc.gd"\nDocShot="*res://doc_shot.gd"')
+        files["frame_probe.py"] = DMD_FRAME_PROBE
+        files["config/config.yaml"] = files["config/config.yaml"].replace(
+            "switches:\n", "switches:\n  s_doc_shot:\n    number:\n", 1) + DMD_SCRIPT
+        out = Path(tempfile.mkdtemp(prefix="mpf_docs_gmc_frames_"))
+        CREATED.append(out)
+        os.environ["DOC_SHOT_DIR"] = str(out).replace("\\", "/")
+        run = BothRun(build_project(files), platform="-X")
+        try:
+            self.assertTrue(run.wait_for("DOC_FRAME 2", 90), run.text()[-3000:])
+            text = run.text()
+        finally:
+            run.stop()
+        self.assertNotIn("SCRIPT ERROR", text)
+        self.assertIn("DOC_FRAME 1 frames=1 bytes=12288", text)
+        self.assertIn("DOC_FRAME 2 frames=2 bytes=12288", text)
+        self.assertIn("DOC_IMAGE 1024x256", text)
+        return [(out / ("frame_%d.bin" % n)).read_bytes() for n in (1, 2)]
+
+    @staticmethod
+    def pixels(frame):
+        return [tuple(frame[i:i + 3]) for i in range(0, len(frame), 3)]
+
+    def check_frames(self, frames):
+        for frame in frames:
+            pixels = self.pixels(frame)
+            self.assertEqual(128 * 32, len(pixels))
+            # mostly black, with full-brightness orange text (Color(1, 0.55, 0.1))
+            self.assertGreater(pixels.count((0, 0, 0)), 3500)
+            self.assertGreater(pixels.count((255, 140, 25)), 200)
+        self.assertNotEqual(frames[0], frames[1])   # attract, then the ball slide
+
+    def test_frames_without_filter(self):
+        self.check_frames(self.run_page(with_filter=False))
+
+    def test_frames_with_filter(self):
+        frames = self.run_page(with_filter=True)
+        self.check_frames(frames)
+        # the dark grid between the dots (Color(0.1, 0, 0)) doesn't reach the frames
+        for frame in frames:
+            self.assertNotIn((25, 0, 0), self.pixels(frame))
+            self.assertNotIn((26, 0, 0), self.pixels(frame))
+
+
 def tearDownModule():
     for path in CREATED:
         shutil.rmtree(godot_user_dir(path.name), ignore_errors=True)
