@@ -1,0 +1,8 @@
+{"page": "gmc/install-and-connect.md", "shots": [
+ {"create_dialog": true, "search": "MPFSlide", "out": "install-create-mpfslide.png", "width": 900},
+ {"create_dialog": true, "search": "MPFVariable", "out": "variables-create-mpfvariable.png", "width": 900},
+ {"create_dialog": true, "search": "MPFWidget", "out": "widgets-create-mpfwidget.png", "width": 900},
+ {"create_dialog": true, "search": "MPFCarousel", "out": "carousel-create-mpfcarousel.png", "width": 900},
+ {"create_dialog": true, "search": "MPFEventHandler", "out": "events-create-handler.png", "width": 900},
+ {"create_dialog": true, "search": "MPF", "out": "displays-create-mpf.png", "width": 900}
+]}

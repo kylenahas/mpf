@@ -1,6 +1,6 @@
 ---
 title: "Displays, filters and running GMC on the machine"
-weight: 8
+weight: 9
 summary: "Your own window scene with more than one display, slides aimed at each with target, screen filters, window settings, GMC starting MPF itself, and exporting."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together); exporting not run"
 ---
@@ -62,6 +62,29 @@ enabled=PackedStringArray("res://addons/mpf-gmc/plugin.cfg")
 | **Initial Slide** | A scene shown on this display from startup until the first slide arrives. The example gives the main display GMC's startup scene, which shows "Waiting for MPF...". |
 | **Allow Empty** | Let the display go blank when its last slide is removed (see [slides](/gmc/slides/#when-nothing-is-left)). |
 
+To build the example's `window.tscn`:
+
+1. **Scene > New Scene**, choose **Other Node** and pick **MPFWindow**. Anchor it **Full Rect**. Searching for `MPF`
+   in this dialog lists every node type GMC adds:
+
+   ![The Create New Node dialog searched for MPF, listing MPFDisplay, MPFDMDDisplay, MPFSlide, MPFWidget, MPFEventHandler, MPFVariable, MPFWindow and others](/images/gmc/editor/displays-create-mpf.png)
+
+2. Add an **MPFDisplay** child named `main`. Under **Layout > Transform**, give it **Size** 1152 × 648 at **Position**
+   0, 0. Tick **Is Default**, and set **Initial Slide** to GMC's `addons/mpf-gmc/slides/startup.tscn` (drag it from the
+   FileSystem panel onto the property, or use the property's **Load** option).
+
+   ![The Inspector for main: Is Default on, Initial Slide set to the startup scene](/images/gmc/editor/displays-main-inspector.png)
+
+3. Add a second **MPFDisplay** named `info`, with **Size** 1152 × 216 at **Position** 0, 648, just below `main`.
+
+   ![The Inspector for info filtered to "position", showing Position 0, 648](/images/gmc/editor/displays-info-position.png)
+
+4. Save the scene as `window.tscn` and make it the project's main scene.
+
+In the editor each display is drawn as a coloured box with its name, so the layout is easy to check:
+
+![The window scene in the editor: main as a red box above info as a blue box, with info selected](/images/gmc/editor/displays-window-info.png)
+
 Each display keeps its own [slide stack](/gmc/slides/#the-slide-stack), so slides on one never cover slides on
 another.
 
@@ -98,7 +121,9 @@ columns=96.0
 rows=72.0
 ```
 
-The example's window scene copies the `pixelate` filter from GMC's window. With the section above, the picture was
+The example's window scene copies the `pixelate` filter from GMC's window. To do the same, open GMC's
+`addons/mpf-gmc/slides/window.tscn`, right-click its `filters` node and choose **Copy**, then in your window scene
+right-click the root and choose **Paste**, and delete the filters you don't use. With the section above, the picture was
 drawn as a 96 × 72 grid of blocks:
 
 ![The same two displays drawn through the pixelate filter](/images/gmc/filter-pixelate.png)
@@ -183,6 +208,7 @@ screen.
 The machine, slides and modes are from [Slides and slide_player](/gmc/slides/#the-complete-machine), with the
 `base.yaml` `slide_player` entry above. The new files:
 
+{{< scenefile "window.tscn" >}}
 `window.tscn`:
 
 ```ini
@@ -242,7 +268,9 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/info_bar.tscn" >}}
 `slides/info_bar.tscn`:
 
 ```ini
@@ -284,6 +312,7 @@ script = ExtResource("2_var")
 variable_name = "ball"
 template_string = "INFO DISPLAY: BALL %s"
 ```
+{{< /scenefile >}}
 
 `modes/base/config/base.yaml`:
 

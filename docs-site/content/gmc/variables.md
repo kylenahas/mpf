@@ -1,6 +1,6 @@
 ---
 title: "Showing scores and variables"
-weight: 3
+weight: 4
 summary: "Put the score, player and machine variables, and event values on a slide with MPFVariable, and change them with tokens and action: update."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -19,7 +19,13 @@ It builds on [Slides and slide_player](/gmc/slides/): the same machine, without 
 ## Adding a variable to a slide
 
 In a slide scene, add a child node and pick **MPFVariable** (it's listed under `Label`, because that's what it extends).
-Style it like any label (font, size, alignment), then set what it shows in the Inspector:
+
+![The Create New Node dialog with MPFVariable found under Label](/images/gmc/editor/variables-create-mpfvariable.png)
+
+Style it like any label (font, size, alignment), then set what it shows in the Inspector, in the **MPFVariable**
+section at the top:
+
+![The Inspector for the Score label: Variable Type Current Player, Variable Name score, Comma Separate on](/images/gmc/editor/variables-score-inspector.png)
 
 | Property | Default | What it does |
 |---|---|---|
@@ -50,7 +56,22 @@ logs `MPFVariable '<name>' is a player variable and should only exist in game mo
 
 ## The base slide
 
-The base slide in the example has five labels:
+The base slide in the example has five labels, stacked by a `VBoxContainer`:
+
+1. Make the slide as in [Slides](/gmc/slides/#making-a-slide): an `MPFSlide` root named `base` and a full-rect
+   `ColorRect` background.
+2. Add a `VBoxContainer` child named `Lines`, anchored **Full Rect**, with **Alignment** set to **Center**. A
+   container lays out its children, here one under the other, so the labels need no positions of their own.
+3. Add five **MPFVariable** children to `Lines` and set each one as in the table below.
+
+![The base slide in the editor: Lines holds the five MPFVariable labels, with Score selected](/images/gmc/editor/variables-base-score.png)
+
+The labels have no text of their own, so the slide looks empty in the editor. To see the layout while you work, give
+them some sample **Text**: **Initialize Empty** (on by default) hides it in the game until the real value arrives.
+
+The `Credits` label shows a machine variable instead of a player variable:
+
+![The Inspector for the Credits label: Variable Type Machine Var, Variable Name credits_string](/images/gmc/editor/variables-credits-inspector.png)
 
 | Label | Variable Type | Variable Name | Formatting |
 |---|---|---|---|
@@ -242,6 +263,7 @@ The two slides. In the scene files an `MPFVariable` is a `Label` with the `mpf_v
 settings are the lines after `script =`. `variable_type = 1` is Event Arg and `2` is Machine Var; Current Player is the
 default, so it isn't written.
 
+{{< scenefile "slides/base.tscn" >}}
 `slides/base.tscn`:
 
 ```ini
@@ -317,7 +339,9 @@ script = ExtResource("2_var")
 variable_type = 2
 variable_name = "credits_string"
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/ramp_lit.tscn" >}}
 `slides/ramp_lit.tscn`:
 
 ```ini
@@ -358,3 +382,4 @@ script = ExtResource("2_var")
 variable_type = 1
 variable_name = "award"
 ```
+{{< /scenefile >}}

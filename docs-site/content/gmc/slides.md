@@ -1,6 +1,6 @@
 ---
 title: "Slides and slide_player"
-weight: 2
+weight: 3
 summary: "Make slides in Godot, play and remove them from MPF with slide_player, and how GMC's slide stack decides what is on screen."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -35,6 +35,26 @@ GMC then looks in `<content_root>/slides/` instead of `slides/`.
 Anything a Godot scene can hold can go on a slide: labels, images, video, animation, shaders. The slides on this page
 are a coloured background and a label each. The `skillshot` slide has **no background**, just a banner across the
 bottom, so whatever is underneath it shows through.
+
+`base` and `ramp_lit` are built like the attract slide in [the install guide](/gmc/install-and-connect/#5-add-an-attract-slide),
+with a different colour and text. To build `skillshot`:
+
+1. Make a new scene with an `MPFSlide` root named `skillshot`, anchored **Full Rect**, as before. Don't add a
+   background.
+2. Add a `ColorRect` child named `Banner`. In the anchor preset menu, choose **Bottom Wide**, then drag its top edge up
+   in the 2D view to make it 220 pixels tall (or set **Size** under **Layout > Transform** in the Inspector). Pick a
+   **Color**.
+
+   ![The skillshot slide with Banner selected: a purple banner across the bottom of an otherwise empty slide](/images/gmc/editor/slides-skillshot-banner.png)
+
+   ![The Inspector filtered to "anchor", showing the Bottom Wide anchor preset](/images/gmc/editor/slides-skillshot-banner-anchors.png)
+
+3. Add a `Label` as a child of **`Banner`**, not of the slide: select `Banner` before clicking **+**. Name it
+   `Title`, set its text and font size, centre it, and anchor it **Full Rect**, which now means "fill the banner".
+
+   ![The scene tree with Title nested under Banner, and the label filling the banner](/images/gmc/editor/slides-skillshot-title.png)
+
+4. Save it as `slides/skillshot.tscn`.
 
 ## Playing slides
 
@@ -244,6 +264,7 @@ slide_player:
 The three slides, as saved by the editor. `base` and `ramp_lit` are a full-screen `ColorRect` and a `Label`;
 `skillshot` is a `ColorRect` banner anchored to the bottom, with a `Label` inside it and nothing behind it.
 
+{{< scenefile "slides/base.tscn" >}}
 `slides/base.tscn`:
 
 ```ini
@@ -281,7 +302,9 @@ text = "BALL IN PLAY"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/ramp_lit.tscn" >}}
 `slides/ramp_lit.tscn`:
 
 ```ini
@@ -319,7 +342,9 @@ text = "RAMP LIT"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/skillshot.tscn" >}}
 `slides/skillshot.tscn`:
 
 ```ini
@@ -359,3 +384,4 @@ text = "SKILL SHOT!"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}

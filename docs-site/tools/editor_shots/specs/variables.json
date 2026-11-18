@@ -1,0 +1,37 @@
+{
+ "page": "gmc/variables.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md",
+  "gmc/slides.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Score",
+   "out": "variables-base-score.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Score",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.55
+   ],
+   "out": "variables-score-inspector.png"
+  },
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Credits",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.55
+   ],
+   "out": "variables-credits-inspector.png"
+  }
+ ]
+}

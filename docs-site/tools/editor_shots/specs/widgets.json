@@ -1,0 +1,27 @@
+{
+ "page": "gmc/widgets.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md",
+  "gmc/slides.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://widgets/jackpot.tscn",
+   "select": ".",
+   "out": "widgets-jackpot-root.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://widgets/jackpot.tscn",
+   "select": ".",
+   "filter": "size",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.45
+   ],
+   "out": "widgets-jackpot-size.png"
+  }
+ ]
+}

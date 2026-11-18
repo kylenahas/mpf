@@ -1,6 +1,6 @@
 ---
 title: "Events between MPF and Godot"
-weight: 7
+weight: 8
 summary: "React to MPF events in Godot with MPFEventHandler or a script, call a slide's own code from slide_player, send events back to MPF, and map keyboard keys to switches."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -50,6 +50,27 @@ extends Label
 func show_jackpot(payload: Dictionary) -> void:
 	text = "JACKPOT LIT: %s" % payload.get("value", "?")
 ```
+
+In the editor:
+
+1. Select the `Jackpot` label, right-click it in the **Scene** panel and choose **Attach Script**. Save the script as
+   `slides/jackpot_label.gd`; it inherits `Label`. Type the function above into it.
+
+   ![The Inspector for Jackpot filtered to "script", showing jackpot_label.gd attached](/images/gmc/editor/events-jackpot-script.png)
+
+2. With `Jackpot` still selected, add a child and pick **MPFEventHandler**. Rename it `OnJackpotLit`.
+
+   ![The Create New Node dialog with MPFEventHandler found under Control](/images/gmc/editor/events-create-handler.png)
+
+3. In the Inspector, set **Event Name** to `jackpot_lit` and **Call Method** to `show_jackpot`. Leave **Handler
+   Direction** at `Parent`, so the method is called on `Jackpot`.
+
+   ![The Inspector for OnJackpotLit: Event Name jackpot_lit, Handler Direction Parent, Call Method show_jackpot](/images/gmc/editor/events-handler-inspector.png)
+
+   ![The base slide's scene tree: OnJackpotLit under Jackpot, and OnMysteryDone under Done](/images/gmc/editor/events-handler.png)
+
+An `MPFEventHandler` draws nothing, so it can sit anywhere in the slide. The `Done` label further down works the same
+way, with an `OnMysteryDone` handler.
 
 MPF posts the event with an argument, from the base mode's `event_player`:
 
@@ -109,6 +130,15 @@ func spin(settings: Dictionary, kwargs: Dictionary) -> void:
 	$Result.text = "MYSTERY: %s" % points
 	MPF.server.send_event_with_args("mystery_done", {"points": points})
 ```
+
+In the editor, make the slide with an **MPFSlide** root as usual, then right-click the root in the **Scene** panel and
+choose **Extend Script**. That creates a new script that extends GMC's slide script, and attaches it in place of it;
+save it as `slides/mystery.gd`. Its first line extends GMC's slide script, either as `extends MPFSlide` or by the
+script's path; both mean the same.
+
+![The Inspector for the mystery root filtered to "script", showing mystery.gd attached and MPFSlide still listed](/images/gmc/editor/events-mystery-script.png)
+
+The Inspector still shows the **MPFSlide** section: the root is still an `MPFSlide`, now with your code added.
 
 In the test run the target hit started the spin:
 
@@ -277,6 +307,7 @@ func on_done(payload: Dictionary) -> void:
 	text = "MYSTERY DONE x%d: %s" % [count, payload.get("points", "?")]
 ```
 
+{{< scenefile "slides/base.tscn" >}}
 `slides/base.tscn`:
 
 ```ini
@@ -365,7 +396,9 @@ script = ExtResource("4_handler")
 event_name = "mystery_done"
 call_method = "on_done"
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/mystery.tscn" >}}
 `slides/mystery.tscn`:
 
 ```ini
@@ -403,3 +436,4 @@ text = "MYSTERY"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}

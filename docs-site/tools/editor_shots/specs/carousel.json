@@ -1,0 +1,26 @@
+{
+ "page": "gmc/carousel.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md",
+  "gmc/slides.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://slides/award_select.tscn",
+   "select": "Awards",
+   "out": "carousel-awards.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/award_select.tscn",
+   "select": "Awards",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.3
+   ],
+   "out": "carousel-awards-inspector.png"
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 ---
 title: "Widgets and widget_player"
-weight: 4
+weight: 5
 summary: "Put small scenes on top of a slide with widget_player: positioning, expiry, the overlay that sits above every slide, and what happens when slides and modes change."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -25,6 +25,27 @@ or in `modes/<mode>/widgets/`). As with slides, the file name is the widget's na
 Unlike a slide, a widget isn't stretched over the screen. Give its root node the size the widget should be: in the
 example, `jackpot` is 600 × 150 and `lock_lit` is 360 × 90, each a coloured `ColorRect` with a `Label` on it.
 `widget_player` places the widget's top-left corner with `x` and `y` (`MPFWidget.initialize`).
+
+To build `jackpot`:
+
+1. **Scene > New Scene**, choose **Other Node**, and pick **MPFWidget**. Rename it `jackpot`. Leave its anchor preset
+   at **Top Left**.
+
+   ![The Create New Node dialog with MPFWidget found under Control](/images/gmc/editor/widgets-create-mpfwidget.png)
+
+2. Set its size: in the Inspector, under **Layout > Transform**, set **Size** to 600 × 150 (or drag its corner in the
+   2D view).
+
+   ![The Inspector filtered to "size", showing the widget's Size of 600 by 150](/images/gmc/editor/widgets-jackpot-size.png)
+
+3. Add a `ColorRect` child named `Panel`, anchored **Full Rect**, and a `Label` named `Title` inside `Panel`, also
+   **Full Rect** and centred. Set the label's text, font size and font colour (under **Theme Overrides > Colors**).
+
+   ![The jackpot widget in the editor: a 600 by 150 yellow panel reading JACKPOT! in the top-left of the canvas](/images/gmc/editor/widgets-jackpot-root.png)
+
+4. Save it as `widgets/jackpot.tscn`. `lock_lit` is made the same way at 360 × 90.
+
+The root shows as **MPFSceneBase** at the top of the Inspector: `MPFWidget`, like `MPFSlide`, is built on it.
 
 ## Playing widgets
 
@@ -222,6 +243,7 @@ widget_player:
 The slides are `slides/base.tscn` and `slides/ramp_lit.tscn` from the [slides page](/gmc/slides/#the-complete-machine).
 The widgets:
 
+{{< scenefile "widgets/jackpot.tscn" >}}
 `widgets/jackpot.tscn`:
 
 ```ini
@@ -258,7 +280,9 @@ text = "JACKPOT!"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}
 
+{{< scenefile "widgets/lock_lit.tscn" >}}
 `widgets/lock_lit.tscn`:
 
 ```ini
@@ -294,3 +318,4 @@ text = "LOCK LIT"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}

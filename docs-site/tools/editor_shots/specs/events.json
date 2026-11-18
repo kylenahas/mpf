@@ -1,0 +1,50 @@
+{
+ "page": "gmc/events.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md",
+  "gmc/slides.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Jackpot/OnJackpotLit",
+   "out": "events-handler.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Jackpot/OnJackpotLit",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.3
+   ],
+   "out": "events-handler-inspector.png"
+  },
+  {
+   "scene": "res://slides/base.tscn",
+   "select": "Lines/Jackpot",
+   "filter": "script",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.5
+   ],
+   "out": "events-jackpot-script.png"
+  },
+  {
+   "scene": "res://slides/mystery.tscn",
+   "select": ".",
+   "filter": "script",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.5
+   ],
+   "out": "events-mystery-script.png"
+  }
+ ]
+}

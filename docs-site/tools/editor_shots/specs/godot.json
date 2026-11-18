@@ -1,0 +1,4 @@
+{"page": "gmc/install-and-connect.md", "shots": [
+ {"scene": "res://slides/attract.tscn", "select": "Title", "tab": "GMC", "crop": [0.0, 0.03, 0.115, 0.52], "out": "godot-gmc-dock.png"},
+ {"scene": "res://slides/attract.tscn", "select": "Title", "tab": "MPF", "crop": [0.0, 0.03, 0.115, 0.52], "out": "godot-mpf-dock.png"}
+]}

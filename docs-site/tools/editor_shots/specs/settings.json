@@ -1,0 +1,5 @@
+{"page": "gmc/install-and-connect.md", "shots": [
+ {"project_settings": "Plugins", "out": "install-settings-plugins.png", "width": 1000},
+ {"project_settings": "Globals", "subtab": "Autoload", "out": "install-settings-autoload.png", "width": 1000},
+ {"project_settings": "General", "search": "main scene", "section": "Run", "out": "install-settings-main-scene.png", "width": 1000}
+]}

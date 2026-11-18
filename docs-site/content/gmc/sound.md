@@ -1,6 +1,6 @@
 ---
 title: "Sound and sound_player"
-weight: 5
+weight: 6
 summary: "Set up audio buses for music, effects and callouts, play sounds from MPF with sound_player, duck the music under callouts, and stop sounds."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -39,6 +39,7 @@ Open the **Audio** panel at the bottom of the editor, add a bus for each kind of
 Godot saves it as `default_bus_layout.tres` in the project root. The example has `music`, `sfx` and `voice`, all
 sending to `Master`:
 
+{{< scenefile "default_bus_layout.tres" >}}
 `default_bus_layout.tres`:
 
 ```ini
@@ -64,6 +65,7 @@ bus/3/bypass_fx = false
 bus/3/volume_db = 0.0
 bus/3/send = &"Master"
 ```
+{{< /scenefile >}}
 
 ### 2. Describe them in gmc.cfg
 

@@ -1,0 +1,29 @@
+{
+ "page": "gmc/install-and-connect.md",
+ "shots": [
+  {
+   "scene": "res://slides/attract.tscn",
+   "select": "Background",
+   "out": "install-attract-background.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/attract.tscn",
+   "select": "Title",
+   "out": "install-attract-title.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/attract.tscn",
+   "select": "Title",
+   "filter": "font size",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.45
+   ],
+   "out": "install-attract-title-font.png"
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 ---
 title: "A 128×32 DMD"
-weight: 9
+weight: 10
 summary: "Designing slides at DMD resolution, showing them as dots on a screen with GMC's DMD filter, and sending frames to a physical DMD through MPF."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -48,8 +48,14 @@ Use `canvas_items`, not `viewport`, if you want GMC's DMD filter. With `viewport
 × 32 and then enlarges the result. The filter is part of that window (`MPFWindow` keeps it with the slides), so it
 would have only one screen pixel per dot to draw a round dot with. Only `canvas_items` was run for this page.
 
-Slides are ordinary GMC slides, just small: the `PRESS START` label in the attract slide below is `font_size = 14`,
-and the ball number is 20. Without a filter, the window shows them as smooth text at 8 times the size:
+Slides are ordinary GMC slides, built as in [Slides](/gmc/slides/#making-a-slide), just small: the `PRESS START`
+label in the attract slide below is a font size of 14, and the ball number is 20. At the editor's normal zoom a 128 ×
+32 slide is tiny, so zoom the 2D view in (the **+** next to the zoom percentage, or the mouse wheel); here it's at
+600%:
+
+![The attract slide in the editor at 600% zoom: PRESS START in orange on a black 128 by 32 slide](/images/gmc/editor/dmd-attract-zoom.png)
+
+Without a filter, the window shows the slides as smooth text at 8 times the size:
 
 ![PRESS START in smooth orange text, 1024 by 256](/images/gmc/dmd-no-filter.png)
 
@@ -86,17 +92,16 @@ A colour in `gmc.cfg` uses Godot's syntax, for example `color=Color(0.05, 0.02, 
 ## A physical DMD
 
 `MPFDMDDisplay` is a display that also sends its picture to MPF (`classes/mpf_dmd_display.gd`). In the window scene
-below, the project's only display is one:
+below, the project's only display is one. To set it up:
 
-```ini
-[node name="dmd" type="Control" parent="."]
-layout_mode = 0
-offset_right = 128.0
-offset_bottom = 32.0
-script = ExtResource("2_dmd")
-is_default = true
-resolution = Vector2i(128, 32)
-```
+1. Make a window scene with an **MPFWindow** root, as in [Displays](/gmc/displays/#your-own-window-scene).
+2. Add a child and pick **MPFDMDDisplay** (it's listed under `MPFDisplay`). Name it `dmd`, the name MPF will use.
+3. Give it **Size** 128 × 32 at **Position** 0, 0 under **Layout > Transform**, and tick **Is Default**.
+4. Set **Resolution** to 128 × 32: the size of each frame sent to MPF.
+
+![The Inspector for dmd: MPFDMDDisplay with Resolution 128 by 32, Pixel Order Rgb, Use GPU Never, and Is Default on](/images/gmc/editor/dmd-display-inspector.png)
+
+![The window scene in the editor at 600%: the dmd display's 128 by 32 outline, with the filters node holding virtual_dmd](/images/gmc/editor/dmd-window.png)
 
 Whenever the picture changes, it copies the window, shrinks it to `resolution` without smoothing, and sends the pixels
 to MPF in an `rgb_dmd_frame` message named after the display node. It only sends while MPF is connected. Its other
@@ -170,6 +175,7 @@ MPF="*res://addons/mpf-gmc/mpf_gmc.gd"
 enabled=PackedStringArray("res://addons/mpf-gmc/plugin.cfg")
 ```
 
+{{< scenefile "window.tscn" >}}
 `window.tscn`:
 
 ```ini
@@ -224,7 +230,9 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/attract.tscn" >}}
 `slides/attract.tscn`:
 
 ```ini
@@ -263,7 +271,9 @@ text = "PRESS START"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}
 
+{{< scenefile "slides/base.tscn" >}}
 `slides/base.tscn`:
 
 ```ini
@@ -305,6 +315,7 @@ script = ExtResource("2_var")
 variable_name = "ball"
 template_string = "BALL %s"
 ```
+{{< /scenefile >}}
 
 `config/config.yaml`:
 

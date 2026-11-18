@@ -1,0 +1,38 @@
+{
+ "page": "gmc/displays.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md",
+  "gmc/slides.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://window.tscn",
+   "select": "info",
+   "out": "displays-window-info.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://window.tscn",
+   "select": "main",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.4
+   ],
+   "out": "displays-main-inspector.png"
+  },
+  {
+   "scene": "res://window.tscn",
+   "select": "info",
+   "filter": "position",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.45
+   ],
+   "out": "displays-info-position.png"
+  }
+ ]
+}

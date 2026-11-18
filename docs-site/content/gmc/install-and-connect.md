@@ -1,6 +1,6 @@
 ---
 title: "Install GMC and connect it to MPF"
-weight: 1
+weight: 2
 summary: "Set up a Godot project with the GMC add-on in your machine folder, add a first slide, and start MPF and GMC together with mpf both."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -65,13 +65,24 @@ GMC's startup screen needs them.
 
 ## 4. Turn GMC on in the project settings
 
-GMC needs three settings, all under **Project > Project Settings**:
+GMC needs three settings, all in **Project > Project Settings...**:
 
-| Setting | Where | Value |
-|---|---|---|
-| The plugin | **Plugins** tab | Enable **Godot MC**. This adds GMC's node types (`MPFSlide`, `MPFWidget`, `MPFVariable` and others) to the editor. |
-| The autoload | **Globals** tab, **Autoload** | Path `res://addons/mpf-gmc/mpf_gmc.gd`, name **`MPF`**, enabled. |
-| The main scene | **General** tab, **Application > Run > Main Scene** | `res://addons/mpf-gmc/slides/window.tscn`, GMC's window. |
+1. **The plugin.** On the **Plugins** tab, tick **Enabled** for **Godot MC**. This adds GMC's node types
+   (`MPFSlide`, `MPFWidget`, `MPFVariable` and others) to the editor.
+
+   ![Project Settings, Plugins tab: Godot MC 1.0.0 by Mission Pinball Framework, enabled](/images/gmc/editor/install-settings-plugins.png)
+
+2. **The autoload.** On the **Globals** tab, under **Autoload**, click **Select Script/Scene** and pick
+   `res://addons/mpf-gmc/mpf_gmc.gd`. Godot names the new entry after the file; double-click the name and change it to
+   **`MPF`**. Leave **Global Variable** ticked.
+
+   ![Project Settings, Globals tab, Autoload: MPF with path res://addons/mpf-gmc/mpf_gmc.gd and Global Variable enabled](/images/gmc/editor/install-settings-autoload.png)
+
+3. **The main scene.** On the **General** tab, go to **Application > Run** (or type `main scene` in the filter box) and
+   set **Main Scene** to `res://addons/mpf-gmc/slides/window.tscn`, GMC's window, with the file button at the end of
+   the field.
+
+   ![Project Settings, General tab filtered to "main scene": Application, Run, Main Scene set to res://addons/mpf-gmc/slides/window.tscn](/images/gmc/editor/install-settings-main-scene.png)
 
 {{< warn >}}
 **The autoload must be named exactly `MPF`.** Every GMC script refers to it by that name. In a test run with the
@@ -123,11 +134,37 @@ GMC has no slide called `attract` of its own, so it has to come from your projec
 A slide is a Godot scene whose root node is an `MPFSlide`. GMC finds slides by file name in the project's `slides/`
 folder (and in `modes/<mode>/slides/`), so `slides/attract.tscn` is the slide named `attract`. In the editor:
 
-1. **Scene > New Scene**, then choose **Other Node** and pick `MPFSlide` as the root.
-2. Add what the slide shows. This one has a `ColorRect` for the background and a `Label` reading "PRESS START".
-3. Save it as `slides/attract.tscn`.
+1. **Scene > New Scene.** In the **Scene** panel, choose **Other Node**, search for `MPFSlide` and click **Create**.
+   GMC adds its node types to this list, so you don't need to attach scripts yourself.
 
-The scene file from the test run, for reference (you'd normally build this in the editor rather than type it):
+   ![The Create New Node dialog with MPFSlide found under Control and MPFSceneBase](/images/gmc/editor/install-create-mpfslide.png)
+
+2. Double-click the new node and rename it `attract`. With it selected, open the **Anchor preset** menu in the toolbar
+   above the 2D view and choose **Full Rect**, so the slide fills the display.
+3. Add the background: with `attract` selected, click **+** (Add Child Node), pick `ColorRect`, rename it
+   `Background`, set its anchor preset to **Full Rect** as well, and pick a **Color** in the Inspector.
+
+   ![The editor with Background selected: the scene tree on the left, the blue slide in the 2D view, and the ColorRect's Color in the Inspector](/images/gmc/editor/install-attract-background.png)
+
+4. Add the text: add a `Label` child to `attract` and rename it `Title`. In the Inspector, type `PRESS START` as its
+   **Text**, set **Horizontal Alignment** and **Vertical Alignment** to **Center**, and set its anchor preset to
+   **Full Rect**.
+
+   ![The editor with Title selected and its Text, alignment and anchor settings in the Inspector](/images/gmc/editor/install-attract-title.png)
+
+5. Make the text bigger: in the Inspector, under **Theme Overrides > Font Sizes**, tick **Font Size** and set it to
+   96. Typing in the Inspector's **Filter Properties** box finds a setting quickly.
+
+   ![The Inspector filtered to "font size", showing Theme Overrides, Font Sizes, Font Size 96](/images/gmc/editor/install-attract-title-font.png)
+
+6. **Scene > Save Scene As** and save it as `slides/attract.tscn`.
+
+Click a screenshot to open it full size. They were taken in Godot 4.7.2 from the test project, by a small test-only
+editor plugin.
+
+{{< scenefile "slides/attract.tscn" >}}
+The scene file the steps produce, as used in the test run (you'd normally build this in the editor rather than
+type it):
 
 `slides/attract.tscn`:
 
@@ -168,6 +205,7 @@ vertical_alignment = 1
 ```
 
 (`MPFSlide` is a `Control` with the `mpf_slide.gd` script, which is why the root node's type in the file is `Control`.)
+{{< /scenefile >}}
 
 ## 6. Add gmc.cfg
 

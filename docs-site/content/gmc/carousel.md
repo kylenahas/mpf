@@ -1,6 +1,6 @@
 ---
 title: "Choosing from a list: carousels"
-weight: 6
+weight: 7
 summary: "Let the player pick from a list with the flippers using MPF's Carousel mode and GMC's MPFCarousel node: an award chooser at the start of a ball."
 verified: "GMC 1.0.0, Godot 4.7.2, MPF 0.82.0.dev0 (both programs run together)"
 ---
@@ -97,8 +97,25 @@ image, a whole layout in a container.
 |---|---|
 | **Carousel Name** | The carousel mode's name, matched against the event's `carousel` argument. If it's empty, the node's own name is used. |
 
-In the example, `award_select.tscn` has a background, a title, and an `MPFCarousel` called `Awards` with Carousel Name
-`award_select` and three `Label` children named `extra_points`, `light_lock` and `double_scoring`.
+To build `award_select.tscn`:
+
+1. Make a slide named `award_select` with a background and a title, as in [Slides](/gmc/slides/#making-a-slide).
+2. Add a child, pick **MPFCarousel**, rename it `Awards` and anchor it **Full Rect**.
+
+   ![The Create New Node dialog with MPFCarousel found under Control](/images/gmc/editor/carousel-create-mpfcarousel.png)
+
+3. In the Inspector, set its **Carousel Name** to `award_select`, the carousel mode's name.
+
+   ![The Inspector for Awards: MPFCarousel with Carousel Name award_select](/images/gmc/editor/carousel-awards-inspector.png)
+
+4. Add a `Label` child to `Awards` for each item, named exactly as the item: `extra_points`, `light_lock` and
+   `double_scoring`. Give each its text, size and centring.
+
+   ![The award_select slide in the editor, with the three item labels under Awards drawn on top of each other](/images/gmc/editor/carousel-awards.png)
+
+In the editor all three items are visible at once, drawn on top of each other. That's expected: GMC hides all but the
+highlighted one when the slide runs. While you work on one item, click the eye icons in the Scene panel to hide the
+others; GMC sets each item's visibility itself, so it doesn't matter how you leave them.
 
 ## What happened in the test run
 
@@ -231,6 +248,7 @@ variable_player:
     score_multiplier: 2
 ```
 
+{{< scenefile "slides/award_select.tscn" >}}
 `slides/award_select.tscn`:
 
 ```ini
@@ -315,3 +333,4 @@ text = "< DOUBLE SCORING >"
 horizontal_alignment = 1
 vertical_alignment = 1
 ```
+{{< /scenefile >}}

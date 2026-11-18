@@ -1,0 +1,5 @@
+{"page": "gmc/dmd.md", "shots": [
+ {"scene": "res://slides/attract.tscn", "select": "Title", "zoom": 6.0, "pan": [-38, -46], "out": "dmd-attract-zoom.png", "width": 1600},
+ {"scene": "res://window.tscn", "select": "dmd", "zoom": 6.0, "pan": [-38, -46], "out": "dmd-window.png", "width": 1600},
+ {"scene": "res://window.tscn", "select": "dmd", "crop": [0.885, 0.03, 1.0, 0.35], "out": "dmd-display-inspector.png"}
+]}

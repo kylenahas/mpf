@@ -1,6 +1,10 @@
-{{- /* Root-relative image paths get the site's base path (the site may be served from a subfolder). */ -}}
+{{- /* Root-relative image paths get the site's base path (the site may be served from a subfolder).
+       Godot editor screenshots link to themselves, so a reader can open them full size. */ -}}
 {{- $src := .Destination -}}
+{{- $editor := hasPrefix $src "/images/gmc/editor/" -}}
 {{- if and (hasPrefix $src "/") (not (hasPrefix $src "//")) -}}
   {{- $src = strings.TrimPrefix "/" $src | relURL -}}
 {{- end -}}
+{{- if $editor }}<a class="shot" href="{{ $src | safeURL }}" title="Open full size">{{ end -}}
 <img src="{{ $src | safeURL }}" alt="{{ .Text }}"{{ with .Title }} title="{{ . }}"{{ end }} loading="lazy">
+{{- if $editor }}</a>{{ end -}}

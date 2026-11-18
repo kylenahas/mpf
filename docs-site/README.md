@@ -15,6 +15,9 @@ docs-site/
   tools/gen_reference.py  source -> reference pages
   tools/check_docs.py     YAML snippet + config key + internal link checks (static)
   tools/casts/            record.sh + driver.py: re-record the terminal casts in static/casts/ (Linux/WSL, asciinema)
+  tools/editor_shots/     take_shots.py + a test-only Godot editor plugin: retake the GMC pages' editor screenshots
+                          (static/images/gmc/editor/) from specs/*.json; needs MPF_DOCS_GODOT and MPF_DOCS_GMC.
+                          fold_scenes.py wraps a page's .tscn blocks in {{< scenefile >}} (collapsed; tests still read them)
   static/casts/           asciinema recordings (.cast), played by the vendored player in assets/vendor/asciinema-player/
   verify/test_guides.py   runs each guide's complete config on MPF (read from the page) and checks the described behavior
   verify/test_gmc.py      builds the GMC pages' Godot project and runs it with `mpf both` (skipped unless configured)

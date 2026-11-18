@@ -1,0 +1,32 @@
+{
+ "page": "gmc/slides.md",
+ "extra_pages": [
+  "gmc/install-and-connect.md"
+ ],
+ "shots": [
+  {
+   "scene": "res://slides/skillshot.tscn",
+   "select": "Banner",
+   "out": "slides-skillshot-banner.png",
+   "width": 1600
+  },
+  {
+   "scene": "res://slides/skillshot.tscn",
+   "select": "Banner",
+   "filter": "anchor",
+   "crop": [
+    0.885,
+    0.03,
+    1.0,
+    0.45
+   ],
+   "out": "slides-skillshot-banner-anchors.png"
+  },
+  {
+   "scene": "res://slides/skillshot.tscn",
+   "select": "Banner/Title",
+   "out": "slides-skillshot-title.png",
+   "width": 1600
+  }
+ ]
+}

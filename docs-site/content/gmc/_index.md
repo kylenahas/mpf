@@ -16,6 +16,7 @@ These pages were checked with GMC 1.0.0, Godot 4.7.2 and MPF 0.82.0.dev0, by run
 
 | Page | What it covers |
 |---|---|
+| [Working in Godot](/gmc/godot/) | A first look at Godot, for anyone new to it: the editor and GMC's docks, scenes, layout, fonts and themes, media, scripts, animation and project conventions, with links to Godot's documentation. |
 | [Install GMC and connect it to MPF](/gmc/install-and-connect/) | Godot, the add-on, the project settings GMC needs, a first slide, and starting both with `mpf both`. |
 | [Slides and slide_player](/gmc/slides/) | Where slides live, playing and removing them, priorities and the slide stack, and the events GMC sends back. |
 | [Showing scores and variables](/gmc/variables/) | `MPFVariable` labels for player and machine variables, formatting, and values from events, `tokens` and `action: update`. |

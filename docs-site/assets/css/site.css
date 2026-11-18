@@ -94,3 +94,9 @@ html{scroll-padding-top:calc(var(--top) + 16px + env(safe-area-inset-top,0px))}
 @media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}.version{display:none}.content{padding:20px 16px 48px}}
 .cast{margin:1.2em 0}.cast .cast-player{border-radius:10px;overflow:hidden}.cast figcaption{font-size:13px;color:var(--muted);margin-top:6px}
 .doc img{max-width:100%;height:auto;border-radius:10px;display:block;margin:1em 0}
+.doc details.scenefile{border:1px solid var(--line);border-radius:10px;padding:.4em .9em;margin:1em 0}
+.doc details.scenefile[open]{padding-bottom:.2em}
+.doc details.scenefile summary{font-weight:600}
+.doc a.shot{display:block;border-bottom:0}
+.doc a.shot img{box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.doc img.inspector,.doc .inspector img{max-width:320px}

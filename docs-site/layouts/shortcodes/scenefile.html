@@ -1,0 +1,5 @@
+{{- /* A scene (or other) file folded away under the editor steps. Usage: {{< scenefile "slides/attract.tscn" >}} ...labelled block... {{< /scenefile >}} */ -}}
+<details class="scenefile">{{- $name := .Get 0 | default "" -}}
+<summary>{{ if or (not $name) (strings.HasSuffix $name ".tscn") }}Scene file{{ else }}File{{ end }}{{ with $name }}: <code>{{ . }}</code>{{ end }}</summary>
+{{ .Inner | .Page.RenderString (dict "display" "block") }}
+</details>
