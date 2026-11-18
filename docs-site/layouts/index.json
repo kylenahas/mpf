@@ -1,5 +1,6 @@
 {{- /* Search index. t=title u=url s=section d=description h=headings
-       k=anchor ids (setting and event names on reference pages) b=body text (hand-written pages only) */ -}}
+       k=anchor ids (setting and event names on reference pages) b=body text (hand-written pages only, without the
+       screen-reader note render-link.html adds to external links) */ -}}
 {{- $pages := slice -}}
 {{- range site.RegularPages -}}
   {{- $section := "" -}}
@@ -15,7 +16,7 @@
   {{- $d := .Params.summary | default "" | plainify | htmlUnescape | truncate 160 -}}
   {{- $entry := dict "t" .Title "u" .RelPermalink "s" $section "d" $d "h" $hs "k" $ks -}}
   {{- if not .Params.generated -}}
-    {{- $entry = merge $entry (dict "b" (.Plain | htmlUnescape | truncate 6000)) -}}
+    {{- $entry = merge $entry (dict "b" (replace .Plain " (external site, opens in a new tab)" "" | htmlUnescape | truncate 6000)) -}}
   {{- end -}}
   {{- $pages = $pages | append $entry -}}
 {{- end -}}

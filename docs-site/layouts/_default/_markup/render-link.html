@@ -5,5 +5,11 @@
 {{- if and (hasPrefix $dest "/") (not (hasPrefix $dest "//")) -}}
   {{- $dest = strings.TrimPrefix "/" $dest | relURL -}}
 {{- end -}}
+{{- /* Links that leave the site open in a new tab, get class "ext" (an icon after them, in site.css) and a note for
+       screen readers. */ -}}
+{{- if or (hasPrefix $dest "http://") (hasPrefix $dest "https://") -}}
+<a class="ext" href="{{ $dest | safeURL }}" target="_blank" rel="noopener"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}<span class="sr-only"> (external site, opens in a new tab)</span></a>
+{{- else -}}
 <a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>
+{{- end -}}
 {{- /* no trailing newline */ -}}
