@@ -1,7 +1,9 @@
+{{ $uses := partial "backlinks.html" . }}
 {{ if or .Params.generated .Params.verified .Params.unverified }}
 <div class="meta">
   {{ if .Params.generated }}<span class="pill gen">Generated from source</span>{{ end }}
   {{ with .Params.verified }}<span class="pill ok">Verified: {{ . }}</span>{{ end }}
   {{ with .Params.unverified }}<span class="pill warn">Not yet run: {{ . }}</span>{{ end }}
+  {{ with $uses }}<a class="pill uses-link" href="#in-these-docs">Used on {{ len . }} {{ cond (eq (len .) 1) "page" "pages" }} in these docs</a>{{ end }}
 </div>
 {{ end }}

@@ -1,9 +1,21 @@
 {{ define "main" }}
 {{ partial "crumbs.html" . }}
+{{- $uses := partial "backlinks.html" . -}}
 <article class="doc">
   <h1>{{ .Title }}</h1>
   {{ partial "meta.html" . }}
-  {{ .Content }}
+  {{- if $uses -}}
+    {{- /* Goes before the list of MPF test configs, or at the end if a page has none. */ -}}
+    {{- $section := partial "backlinks-section.html" $uses -}}
+    {{- $marker := `<h2 id="used-in-tested-configs">` -}}
+    {{- if in .Content $marker -}}
+      {{ replace .Content $marker (print $section $marker) | safeHTML }}
+    {{- else -}}
+      {{ .Content }}{{ $section | safeHTML }}
+    {{- end -}}
+  {{- else -}}
+    {{ .Content }}
+  {{- end }}
   {{ partial "foot.html" . }}
 </article>
 {{ end }}

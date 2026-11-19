@@ -36,7 +36,14 @@
       {{ if and (not .IsHome) (gt (len .TableOfContents) 40) }}
       <aside class="toc-col">
         <div class="toc-title">On this page</div>
-        <div class="toc">{{ .TableOfContents }}</div>
+        {{- /* single.html adds an "In these docs" section to config reference pages that are used elsewhere. */ -}}
+        {{- $toc := .TableOfContents -}}
+        {{- if and .IsPage (partial "backlinks.html" .) -}}
+          {{- $item := `<li><a href="#in-these-docs">In these docs</a></li>` -}}
+          {{- $marker := `<li><a href="#used-in-tested-configs">` -}}
+          {{- $toc = cond (in $toc $marker) (replace $toc $marker (print $item $marker)) (replaceRE `</ul>\s*</nav>\s*$` (print $item "</ul></nav>") $toc) | safeHTML -}}
+        {{- end }}
+        <div class="toc">{{ $toc }}</div>
       </aside>
       {{ end }}
     </div>

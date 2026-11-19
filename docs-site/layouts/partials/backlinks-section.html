@@ -1,0 +1,9 @@
+{{- /* The "In these docs" section of a config reference page, from the list backlinks.html returns. */ -}}
+<h2 id="in-these-docs">In these docs</h2>
+<p>Pages in these docs that show or link to this entry:</p>
+<ul class="uses">
+{{- range . }}
+  <li><a href="{{ .page.RelPermalink }}{{ with .id }}#{{ . }}{{ end }}">{{ .page.Title }}</a>
+    <span class="uses-where">{{ .page.Parent.Title }}{{ with .heading }} · {{ . }}{{ end }}</span></li>
+{{- end }}
+</ul>

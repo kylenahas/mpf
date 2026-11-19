@@ -1,0 +1,18 @@
+{{- /* The hand-written pages that use a config reference page, by name in a YAML example or by a link to it.
+       Returns a list of {page, id, heading}, one per page, ordered by top-level section (as in the sidebar), then
+       path. Empty for other pages. */ -}}
+{{- $out := slice -}}
+{{- if and .Params.generated (hasPrefix .Path "/reference/config/") (strings.HasSuffix .Title ":") -}}
+  {{- $index := partialCached "backlinks-index.html" . "all" -}}
+  {{- $name := strings.TrimSuffix ":" .Title -}}
+  {{- $path := .Path -}}
+  {{- $pages := slice -}}
+  {{- range (index $index $name | default slice) | append (index $index $path | default slice) -}}
+    {{- if not (in $pages .page.RelPermalink) -}}
+      {{- $pages = $pages | append .page.RelPermalink -}}
+      {{- $out = $out | append (merge . (dict "sort" (printf "%04d %s" .page.FirstSection.Weight .page.Path))) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $out = sort $out "sort" -}}
+{{- end -}}
+{{- return $out -}}

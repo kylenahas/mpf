@@ -1,0 +1,40 @@
+{{- /* Which hand-written pages use each config reference page. Called once per build through partialCached.
+       Returns a map from key to a list of {page, id, heading}. A key is a config name ("switches"), for a ```yaml
+       block that has it as a top-level key, or a page path as .Path gives it ("/reference/config/shared/device", no
+       base URL or trailing slash), for a Markdown link to that page. id and heading name the section of the page
+       where it is first used. */ -}}
+{{- $s := newScratch -}}
+{{- range site.RegularPages -}}
+  {{- if not .Params.generated -}}
+    {{- $page := . -}}
+    {{- $seen := slice -}}
+    {{- /* Split the page at its ## and ### headings so each use can link to the section it is in. */ -}}
+    {{- $chunks := split (replaceRE `(?m)^(#{2,3} )` "\x00$1" .RawContent) "\x00" -}}
+    {{- range $chunks -}}
+      {{- $chunk := . -}}
+      {{- $id := "" -}}
+      {{- $heading := "" -}}
+      {{- with findRESubmatch `^#{2,3} ([^\n]+)` $chunk 1 -}}
+        {{- /* Escape a leading "2." so markdownify doesn't turn the heading into a list item. */ -}}
+        {{- $heading = index (index . 0) 1 | replaceRE `^(\d+)\.` `$1\.` | markdownify | plainify | htmlUnescape -}}
+        {{- $id = $heading | anchorize -}}
+      {{- end -}}
+      {{- $keys := slice -}}
+      {{- range findRE "(?ms)^```ya?ml[^\\n]*\\n.*?^```" $chunk -}}
+        {{- range findRE `(?m)^[a-z_][a-z0-9_]*:` . -}}
+          {{- $keys = $keys | append (strings.TrimSuffix ":" .) -}}
+        {{- end -}}
+      {{- end -}}
+      {{- range findRESubmatch `\]\((/reference/config/[^)#\s]*)` $chunk -}}
+        {{- $keys = $keys | append (strings.TrimSuffix "/" (index . 1)) -}}
+      {{- end -}}
+      {{- range $keys -}}
+        {{- if not (in $seen .) -}}
+          {{- $seen = $seen | append . -}}
+          {{- $s.Add . (slice (dict "page" $page "id" $id "heading" $heading)) -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- return $s.Values -}}
